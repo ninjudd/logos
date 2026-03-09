@@ -4,7 +4,7 @@ Step-by-step instructions for building Logos from the architecture spec. Read `A
 
 ## Before you start
 
-Ask the user these questions before writing any code:
+You need three things before writing any code. The user may provide them inline (e.g. "bootstrap Diff telegram witty") or you can ask:
 
 1. **Name** — What should your assistant be called?
 2. **Primary channel** — Which messaging platform do you want to connect first? (Telegram, WhatsApp, Discord, Slack, etc.)

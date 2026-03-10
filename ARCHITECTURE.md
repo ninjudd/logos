@@ -5,24 +5,24 @@
 Logos is a single-process personal AI assistant. Messages come in from messaging channels, get processed by an AI agent, and responses go back out through the same channels.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Logos Process                     │
+┌──────────────────────────────────────────────────────┐
+│                     Logos Process                    │
 │                                                      │
-│  ┌──────────┐   ┌──────────┐   ┌──────────────┐     │
-│  │ Channels │──▶│  Router  │──▶│    Agent     │     │
-│  │          │◀──│          │◀──│  (AI SDK)   │     │
-│  └──────────┘   └──────────┘   └──────┬───────┘     │
+│  ┌──────────┐   ┌──────────┐   ┌──────────────┐      │
+│  │ Channels │──▶│  Router  │──▶│    Agent     │      │
+│  │          │◀──│          │◀──│   (AI SDK)   │      │
+│  └──────────┘   └──────────┘   └──────┬───────┘      │
 │       │                               │              │
-│       │     ┌───────────┐  ┌──────────┴──────────┐  │
-│       │     ┌───────────┐  │    File System       │  │
-│       │     │messages.db│  │ SOUL.md              │  │
-│       │     └───────────┘  │ memory.md            │  │
-│       │                    │ memories/            │  │
-│  ┌──────────┐              │ conversations/       │  │
-│  │Scheduler │              │ heartbeat.md         │  │
-│  └──────────┘              │ cron.yaml + cron/    │  │
-│                            └─────────────────────┘  │
-└─────────────────────────────────────────────────────┘
+│       │     ┌───────────┐  ┌──────────┴───────────┐  │
+│       │     │messages.db│  │     File System      │  │
+│       │     └───────────┘  │  SOUL.md             │  │
+│       │                    │  memory.md           │  │
+│  ┌──────────┐              │  memories/           │  │
+│  │Scheduler │              │  conversations/      │  │
+│  └──────────┘              │  cron/               │  │
+│                            │  skills/             │  │
+│                            └──────────────────────┘  │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## Tech stack
@@ -115,19 +115,13 @@ Everything else lives in plain files:
 
 **`conversations/`** — One markdown file per conversation (e.g. `conversations/family-chat.md`). Contains the custom system prompt and any notes for how the agent should behave in that conversation. The agent reads the relevant file when handling a message.
 
-**`heartbeat.md`** — A checklist the agent reviews on a regular interval. If nothing needs attention, it moves on. Used for lightweight, recurring monitoring (check inbox, check calendar, etc.).
-
-**`cron.yaml`** — Scheduled tasks. Top-level `jobs:` key containing a list of jobs. Each job has a `name` and `cron` expression. Simple jobs include an inline `prompt`. Complex jobs omit the prompt — the scheduler automatically looks for a matching `cron/{name}.md` file.
-
-**`cron/`** — Detailed instructions for complex scheduled tasks. Files are matched by convention: a job named `consolidate-memories` reads from `cron/consolidate-memories.md`.
+**`cron/`** — Everything related to scheduled tasks lives here. `cron/config.yaml` defines the jobs — a top-level `jobs:` key containing a list of jobs, each with a `name` and `cron` expression. Simple jobs include an inline `prompt`. Complex jobs omit the prompt — the scheduler automatically looks for a matching `cron/{name}.md` file. The default heartbeat (every 30 minutes) is just another cron job.
 
 ### 5. Scheduler
 
-The scheduler handles two types of recurring work:
+The scheduler runs cron jobs defined in `cron/config.yaml` under the `jobs:` key. Each job has a `name` and `cron` expression. When a job fires, the scheduler checks for an inline `prompt` first. If none, it looks for `cron/{name}.md` by convention. The prompt is sent to the agent through the router as a synthetic message.
 
-**Heartbeat** — Runs on a fixed interval (e.g. every 30 minutes). Reads `heartbeat.md` and lets the agent check on things. If nothing needs attention, no tokens are wasted.
-
-**Cron jobs** — Defined in `cron.yaml` under the `jobs:` key. Each job has a `name` and `cron` expression. When a job fires, the scheduler checks for an inline `prompt` first. If none, it looks for `cron/{name}.md` by convention. The prompt is sent to the agent through the router as a synthetic message.
+The heartbeat is just a cron job that runs every 30 minutes — no special implementation needed.
 
 ### 6. Skills
 
@@ -152,7 +146,7 @@ The typical flow: the agent edits a file, sends a message explaining what it cha
 1. Initialize SQLite database (create tables if they don't exist)
 2. Discover skills (scan `skills/` for `SKILL.md` files, load names and descriptions)
 3. Register channels (each channel checks for its credentials and connects if present)
-4. Start the scheduler (load heartbeat interval and cron jobs)
+4. Start the scheduler (load cron jobs from `cron/config.yaml`)
 5. Begin processing incoming messages
 
 ## File structure
@@ -185,9 +179,9 @@ memories/           # Daily scratch pad files
 conversations/      # Per-conversation context and prompts
   family-chat.md
   work-dm.md
-heartbeat.md        # Recurring checks
-cron.yaml           # Scheduled tasks
-cron/               # Detailed instructions for complex cron jobs
+cron/               # Scheduled tasks — all in one place
+  config.yaml       # Job schedules (name + cron expression)
+  heartbeat.md      # Instructions for the heartbeat job
   consolidate-memories.md
 logos               # Wrapper script (start/stop/restart/status)
 logs/               # Runtime logs (gitignored)

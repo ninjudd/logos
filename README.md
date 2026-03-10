@@ -59,9 +59,8 @@ messages.db         # SQLite message history (gitignored)
 memory.md           # Consolidated long-term memory
 memories/           # Daily scratch pad files
 conversations/      # Per-conversation context and prompts
-heartbeat.md        # Recurring checks
-cron.yaml           # Scheduled tasks
-cron/               # Detailed instructions for complex cron jobs
+cron/               # Scheduled tasks (config.yaml + job instructions)
+skills/             # Agent skills (agentskills.io format)
 
 # Recipes
 recipes/            # Implementation guides for adding capabilities

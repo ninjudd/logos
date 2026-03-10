@@ -17,7 +17,7 @@ The chosen name should be set as `ASSISTANT_NAME` in `.env`. The code should rea
 - `ai` — **Vercel AI SDK**. Provides `generateText` with built-in tool execution via `maxSteps`. Do not manually implement a tool loop.
 - `@ai-sdk/anthropic` — Anthropic provider for the AI SDK (default). Can be swapped for `@ai-sdk/openai`, `@ai-sdk/google`, etc.
 - `better-sqlite3` — SQLite driver
-- `js-yaml` — YAML parsing for `cron.yaml`
+- `js-yaml` — YAML parsing for `cron/config.yaml`
 - `node-cron` — cron expression scheduling
 - `tsx` — TypeScript execution without a build step. The agent can modify its own source and restart to apply changes.
 - `dotenv` — load environment variables from `.env`
@@ -37,7 +37,7 @@ Channel-specific variables are listed in each recipe.
 
 ## Step-by-step
 
-**Note:** Files like `cron.yaml`, `cron/*.md`, `heartbeat.md`, `memory.md`, and `skills/` already exist with sensible defaults. Don't overwrite them — just use them as-is.
+**Note:** Files like `cron/config.yaml`, `cron/*.md`, `memory.md`, and `skills/` already exist with sensible defaults. Don't overwrite them — just use them as-is.
 
 ### 1. Initialize the project
 
@@ -81,7 +81,7 @@ Start with a minimal set of tools:
 - **recall** — read `memory.md` and optionally search recent daily files in `memories/`
 - **shell** — run a shell command on the host
 
-Skills are markdown instruction files in `skills/` that follow the [Agent Skills](https://agentskills.io) standard. At startup, scan `skills/` for directories containing `SKILL.md`, parse the YAML frontmatter to extract each skill's `name` and `description`, and include them in the system prompt so the agent knows what's available. When the agent decides to use a skill, it reads the full `SKILL.md` for instructions.
+Skills are markdown instruction files in `skills/` that follow the [Agent Skills](https://agentskills.io) standard. At startup, scan `skills/` for directories containing `SKILL.md`, parse the YAML frontmatter with `js-yaml` to extract each skill's `name` and `description`, and include them in the system prompt so the agent knows what's available. When the agent decides to use a skill, it reads the full `SKILL.md` for instructions.
 
 ### 5. Build the channel registry (`src/channels/registry.ts`)
 
@@ -95,18 +95,12 @@ Read the recipe file in `recipes/` for the channel the user chose. Follow its se
 
 ### 7. Build the scheduler (`src/scheduler.ts`)
 
-The scheduler handles two types of recurring work:
-
-**Heartbeat:**
-- Runs on a fixed interval (default: every 30 minutes)
-- Reads `heartbeat.md` and sends its contents to the agent as a synthetic message
-- If nothing needs attention, the agent moves on
-
-**Cron jobs:**
-- On startup, parse `cron.yaml` — jobs are under the `jobs:` key, each with a `name` and `cron` expression
-- Use `node-cron` or similar to schedule each job
+- On startup, parse `cron/config.yaml` — jobs are under the `jobs:` key, each with a `name` and `cron` expression
+- Use `node-cron` to schedule each job
 - When a job fires, check for an inline `prompt` field first. If none, look for `cron/{name}.md` by convention.
 - Send the prompt to the agent through the router as a synthetic message
+
+The heartbeat is just a cron job (`*/30 * * * *`) — no special implementation needed. It's already defined in `cron/config.yaml`.
 
 ### 8. Wire it all together (`src/index.ts`)
 

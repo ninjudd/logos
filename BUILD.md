@@ -12,7 +12,7 @@ Don't worry about the assistant's name or personality — those are configured o
 
 ## Key packages
 
-- `ai` — **Vercel AI SDK**. Provides `generateText` with built-in tool execution via `maxSteps`. Do not manually implement a tool loop.
+- `ai` — **Vercel AI SDK**. Provides `generateText` with built-in tool execution. Limit the number of tool-use steps to prevent runaway loops. Do not manually implement a tool loop.
 - `@ai-sdk/anthropic` — Anthropic provider for the AI SDK (default). Can be swapped for `@ai-sdk/openai`, `@ai-sdk/google`, etc.
 - `better-sqlite3` — SQLite driver
 - `js-yaml` — YAML parsing for cron config and skill frontmatter
@@ -41,7 +41,7 @@ Channel-specific variables are listed in each recipe.
 - Create `package.json` and `tsconfig.json` inside `src/`
 - Target ES2022 with Node module resolution
 - Keep configuration minimal
-- **All code and TypeScript/JavaScript configuration belongs in `src/`.** Everything outside `src/` is markdown, YAML, and data — human-readable files the agent and user interact with directly.
+- **All code and TypeScript/JavaScript configuration belongs in `src/`.** This keeps the repo root clean — everything outside `src/` is markdown, YAML, and data that the agent and user interact with directly.
 - Create a `.env` file at the project root with the API key for the chosen provider, `AI_MODEL`, and any channel-specific variables. Leave the API key blank for the user to fill in.
 
 ### 2. Set up the database (`src/db.ts`)
@@ -50,9 +50,9 @@ SQLite stores **messages only**. Create a single table:
 
 - **messages** — channelId, conversationId, role (`user` or `assistant`), text, timestamp
 
-Don't open the database connection at import time — initialize it in a function that `index.ts` calls at startup. Export functions for storing and retrieving messages and conversation history.
+Store the database file in `data/chat.sqlite`. Don't open the database connection at import time — initialize it in a function that `index.ts` calls at startup. Export functions for storing and retrieving messages and conversation history.
 
-Everything else (memory, tasks, conversation context) lives on the filesystem — see `ARCHITECTURE.md` for details.
+Everything else (memory, skills, cron) lives on the filesystem — see `ARCHITECTURE.md` for details.
 
 ### 3. Build the router (`src/router.ts`)
 
@@ -61,22 +61,23 @@ The router:
 - Accepts incoming messages from channels (channelId, conversationId, text, timestamp)
 - Queues messages per-conversation so only one agent invocation runs per conversation at a time
 - Passes messages to the agent with recent conversation history
-- Sends agent responses back via a callback to the originating channel
+- If the agent responds with the exact string `NO_REPLY`, discard it — don't store or send anything
+- Otherwise, sends agent responses back via a callback to the originating channel
 
 ### 4. Build the agent (`src/agent.ts`)
 
-Use the Vercel AI SDK's `generateText` with `maxSteps` for automatic tool execution. Do not manually implement a tool loop.
+Use the Vercel AI SDK's `generateText` for automatic tool execution. Limit the number of tool-use steps to prevent runaway loops. Do not manually implement a tool loop.
 
-- Use the Anthropic provider by default: `import { anthropic } from "@ai-sdk/anthropic"`
-- Read the model from `process.env.AI_MODEL` with a sensible default
-- The system prompt is assembled from: `SOUL.md` (identity) + `memory.md` (long-term context) + the conversation's file from `conversations/` if one exists + a summary of available skills (names and descriptions from `skills/*/SKILL.md` frontmatter)
+- Use the `@ai-sdk/anthropic` provider by default
+- Read the model from the `AI_MODEL` environment variable with a sensible default
+- The system prompt is assembled from: `SOUL.md` (identity) + `memory.md` (long-term context) + a summary of available skills (names and descriptions from `skills/*/SKILL.md` frontmatter)
 - Pass the message and conversation history, let the SDK handle the rest
 
 Start with a minimal set of tools:
 
 - **remember** — append a note to today's file in `memories/` (e.g. `memories/2026-03-09.md`)
 - **recall** — read `memory.md` and optionally search recent daily files in `memories/`
-- **shell** — run a shell command on the host
+- **shell** — run a shell command on the host (project root as cwd, 30-second timeout, 1 MB output limit)
 
 Skills are markdown instruction files in `skills/` that follow the [Agent Skills](https://agentskills.io) standard. At startup, scan `skills/` for directories containing `SKILL.md`, extract the YAML frontmatter block (between `---` delimiters), parse it with `js-yaml` (not regex) to get each skill's `name` and `description`, and include them in the system prompt so the agent knows what's available. When the agent decides to use a skill, it reads the full `SKILL.md` for instructions.
 
@@ -84,7 +85,7 @@ Skills are markdown instruction files in `skills/` that follow the [Agent Skills
 
 - Scan the `src/channels/` directory for channel files
 - Call each channel's `register()` function with the router
-- A channel's `register()` should return a boolean — `true` if it connected, `false` if credentials were missing and it skipped
+- A channel's `register()` returns whether it connected successfully (may be async) — `true` if it connected, `false` if credentials were missing and it skipped
 - Count the channels that actually connected. If zero, the process should exit with a clear error — there's nothing to connect to.
 
 ### 6. Build the user's chosen channel

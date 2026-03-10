@@ -56,10 +56,9 @@ ARCHITECTURE.md     # System design — how it all fits together
 BUILD.md            # One-time build instructions (delete after use)
 
 # Data
-messages.db         # SQLite message history (gitignored)
+data/               # SQLite database (gitignored)
 memory.md           # Consolidated long-term memory
 memories/           # Daily scratch pad files
-conversations/      # Per-conversation context and prompts
 cron/               # Scheduled tasks (config.yaml + job instructions)
 skills/             # Agent skills (agentskills.io format)
 

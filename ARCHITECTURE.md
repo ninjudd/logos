@@ -14,12 +14,11 @@ Logos is a single-process personal AI assistant. Messages come in from messaging
 │  └──────────┘   └──────────┘   └──────┬───────┘      │
 │       │                               │              │
 │       │     ┌───────────┐  ┌──────────┴───────────┐  │
-│       │     │messages.db│  │     File System      │  │
+│       │     │  data/    │  │     File System      │  │
 │       │     └───────────┘  │  SOUL.md             │  │
 │       │                    │  memory.md           │  │
 │  ┌──────────┐              │  memories/           │  │
-│  │Scheduler │              │  conversations/      │  │
-│  └──────────┘              │  cron/               │  │
+│  │Scheduler │              │  cron/               │  │
 │                            │  skills/             │  │
 │                            └──────────────────────┘  │
 └──────────────────────────────────────────────────────┘
@@ -71,6 +70,8 @@ The router sits between channels and the agent. It:
 - Passes messages to the agent with conversation context
 - Routes agent responses back to the originating channel
 
+If the agent's response is the exact string `NO_REPLY`, the router discards it — nothing is stored or sent. This lets cron jobs and heartbeats run without generating a message when there's nothing to report.
+
 The router is simple glue code. It does not make decisions — it just connects channels to the agent and manages concurrency.
 
 ### 3. Agent
@@ -81,13 +82,11 @@ The agent is the brain. It uses the Vercel AI SDK to:
 - Decide how to respond, optionally using tools
 - Return a response
 
-**Tools** are typed capabilities defined in code: `remember`, `recall`, and `shell`. The AI SDK handles tool execution loops natively via `maxSteps`.
+**Tools** are typed capabilities defined in code: `remember`, `recall`, and `shell`. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
 
 **Skills** teach the agent how to do more complex things using its tools. Skills are markdown files following the [Agent Skills](https://agentskills.io) open standard — see the Skills section below for details.
 
 **Model-agnostic:** The default provider is Anthropic (Claude), but switching to OpenAI, Google, or any other provider is a one-line change.
-
-**Per-conversation context:** Each conversation gets its own system prompt and history. A conversation with your family group chat behaves differently than a 1:1 with your work colleague because the context is different.
 
 ### 4. Storage
 
@@ -99,7 +98,7 @@ SQLite stores message history:
 
 - **messages** — channelId, conversationId, role (`user` or `assistant`), text, timestamp
 
-`messages.db` lives at the project root alongside the other data files. Back it up by copying it. Inspect it with any SQLite client.
+`chat.sqlite` lives in `data/` at the project root. Back it up by copying it. Inspect it with any SQLite client.
 
 #### Filesystem
 
@@ -110,8 +109,6 @@ Everything else lives in plain files:
 **`memory.md`** — The agent's consolidated long-term memory. Key facts, user preferences, important context that persists across all conversations. The agent reads this at the start of every invocation.
 
 **`memories/`** — Daily scratch pad files (e.g. `memories/2026-03-09.md`). Throughout the day, the agent jots down notes, observations, and things worth remembering. These are append-only logs.
-
-**`conversations/`** — One markdown file per conversation (e.g. `conversations/family-chat.md`). Contains the custom system prompt and any notes for how the agent should behave in that conversation. The agent reads the relevant file when handling a message.
 
 **`cron/`** — Everything related to scheduled tasks lives here. `cron/config.yaml` defines the jobs — a top-level `jobs:` key containing a list of jobs, each with a `name` and `cron` expression. Simple jobs include an inline `prompt`. Complex jobs omit the prompt — the scheduler automatically looks for a matching `cron/{name}.md` file. The default heartbeat (every 30 minutes) is just another cron job.
 
@@ -143,14 +140,16 @@ The typical flow: the agent edits a file, sends a message explaining what it cha
 
 1. Initialize SQLite database (create tables if they don't exist)
 2. Discover skills (scan `skills/` for `SKILL.md` files, load names and descriptions)
-3. Register channels (each channel checks for its credentials and connects if present)
+3. Register channels (each channel checks for its credentials and connects if present). If no channels connect, exit with an error — there's nothing to do without at least one channel.
 4. Start the scheduler (load cron jobs from `cron/config.yaml`)
 5. Begin processing incoming messages
 
 ## File structure
 
 ```
-# Code (all code and config lives here)
+# Code — all code, package.json, and tsconfig live here.
+# This keeps the repo root clean: everything outside src/ is
+# human-readable files (markdown, YAML) and data.
 src/
   package.json      # Dependencies
   tsconfig.json     # TypeScript config
@@ -167,16 +166,14 @@ src/
     slack.ts        # Slack channel
     ...             # One file per channel
 
-# Everything outside src/ is data — human-readable files and the database
-messages.db         # SQLite database (messages only)
+# Data
+data/
+  chat.sqlite       # SQLite database
 SOUL.md             # Agent identity — personality, voice, values
 memory.md           # Consolidated long-term memory
 memories/           # Daily scratch pad files
   2026-03-09.md
   2026-03-10.md
-conversations/      # Per-conversation context and prompts
-  family-chat.md
-  work-dm.md
 cron/               # Scheduled tasks — all in one place
   config.yaml       # Job schedules (name + cron expression)
   heartbeat.md      # Instructions for the heartbeat job
@@ -200,15 +197,9 @@ recipes/            # Implementation guides for channels and capabilities
 
 ## Adding a channel
 
-A channel is a single file that exports:
+A channel is a single file that exports a `register` function. The function takes the router, and returns whether it connected successfully (may be async). Inside `register`, the channel:
 
-```typescript
-export function register(router: Router): boolean
-```
-
-Inside `register`, the channel:
-
-1. Checks if its credentials exist (e.g., `process.env.TELEGRAM_BOT_TOKEN`)
+1. Checks if its credentials exist (e.g., the `TELEGRAM_BOT_TOKEN` environment variable)
 2. If not, returns `false`
 3. If yes, connects to the platform, starts forwarding messages to the router, and returns `true`
 
@@ -228,6 +219,6 @@ Implementation details for specific channels and capabilities live in `recipes/`
 ## Security considerations
 
 - The agent runs directly on the host with the same permissions as the user
-- Be thoughtful about which tools you give the agent (shell access, file access, etc.)
+- The **shell tool** runs commands from the project root with a 30-second timeout and a 1 MB output limit. The agent should confirm destructive commands with the user before running them.
 - Messaging credentials are stored as environment variables
 - The SQLite database contains all your messages — protect it accordingly

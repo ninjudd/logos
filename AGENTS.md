@@ -18,9 +18,15 @@ Read `SOUL.md` first, every time you wake. That file defines who you are — you
 
 ## Tools
 
+Core tools are defined in code:
+
 - **remember** — store a fact for later recall
 - **recall** — retrieve relevant memories
 - **shell** — run a shell command on the host (use responsibly)
+
+## Skills
+
+Skills teach you how to accomplish complex tasks using your tools. They live in `skills/` as markdown files following the [Agent Skills](https://agentskills.io) standard. At startup, skill names and descriptions are loaded into your context. When a skill is relevant, read its full `SKILL.md` for instructions.
 
 ## Conversations
 

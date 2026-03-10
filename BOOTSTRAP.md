@@ -37,7 +37,7 @@ Channel-specific variables are listed in each recipe.
 
 ## Step-by-step
 
-**Note:** Files like `cron.yaml`, `cron/*.md`, `heartbeat.md`, and `memory.md` already exist with sensible defaults. Don't overwrite them — just use them as-is.
+**Note:** Files like `cron.yaml`, `cron/*.md`, `heartbeat.md`, `memory.md`, and `skills/` already exist with sensible defaults. Don't overwrite them — just use them as-is.
 
 ### 1. Initialize the project
 
@@ -72,7 +72,7 @@ Use the Vercel AI SDK's `generateText` with `maxSteps` for automatic tool execut
 
 - Use the Anthropic provider by default: `import { anthropic } from "@ai-sdk/anthropic"`
 - Read the model from `process.env.AI_MODEL` with a sensible default
-- The system prompt is assembled from: `SOUL.md` (identity) + `memory.md` (long-term context) + the conversation's file from `conversations/` if one exists
+- The system prompt is assembled from: `SOUL.md` (identity) + `memory.md` (long-term context) + the conversation's file from `conversations/` if one exists + a summary of available skills (names and descriptions from `skills/*/SKILL.md` frontmatter)
 - Pass the message and conversation history, let the SDK handle the rest
 
 Start with a minimal set of tools:
@@ -81,7 +81,7 @@ Start with a minimal set of tools:
 - **recall** — read `memory.md` and optionally search recent daily files in `memories/`
 - **shell** — run a shell command on the host
 
-More tools can be added later. Start simple.
+Skills are markdown instruction files in `skills/` that follow the [Agent Skills](https://agentskills.io) standard. At startup, scan `skills/` for directories containing `SKILL.md`, parse the YAML frontmatter to extract each skill's `name` and `description`, and include them in the system prompt so the agent knows what's available. When the agent decides to use a skill, it reads the full `SKILL.md` for instructions.
 
 ### 5. Build the channel registry (`src/channels/registry.ts`)
 

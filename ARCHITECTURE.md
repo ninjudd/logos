@@ -83,7 +83,9 @@ The agent is the brain. It uses the Vercel AI SDK to:
 - Decide how to respond, optionally using tools
 - Return a response
 
-**Tools** are capabilities the agent can use: reading files, running shell commands, searching the web, etc. The AI SDK handles tool execution loops natively via `maxSteps`.
+**Tools** are typed capabilities defined in code: `remember`, `recall`, and `shell`. The AI SDK handles tool execution loops natively via `maxSteps`.
+
+**Skills** teach the agent how to do more complex things using its tools. Skills are markdown files following the [Agent Skills](https://agentskills.io) open standard — see the Skills section below for details.
 
 **Model-agnostic:** The default provider is Anthropic (Claude), but switching to OpenAI, Google, or any other provider is a one-line change.
 
@@ -127,7 +129,17 @@ The scheduler handles two types of recurring work:
 
 **Cron jobs** — Defined in `cron.yaml` under the `jobs:` key. Each job has a `name` and `cron` expression. When a job fires, the scheduler checks for an inline `prompt` first. If none, it looks for `cron/{name}.md` by convention. The prompt is sent to the agent through the router as a synthetic message.
 
-### 6. Self-modification
+### 6. Skills
+
+Skills are markdown instruction files that teach the agent how to accomplish tasks using its tools. Logos follows the [Agent Skills](https://agentskills.io) open standard — the same format used by Claude Code, Cursor, Gemini CLI, and others. This means skills built for those platforms can work in Logos too.
+
+Each skill is a directory containing a `SKILL.md` file with YAML frontmatter (name, description, requirements) and a markdown body with instructions. See the [specification](https://agentskills.io/specification) for the full format.
+
+Skills live in `skills/` at the project root. The agent discovers available skills by reading their names and descriptions at startup. When a skill is relevant to a conversation, the agent reads the full `SKILL.md` and follows its instructions.
+
+A skill can declare requirements in its frontmatter — environment variables, CLI tools, etc. If the requirements aren't met, the skill is unavailable.
+
+### 7. Self-modification
 
 The agent can edit its own source code via its shell tool. TypeScript is executed directly with `tsx` — there is no build step. To apply code changes, the agent restarts itself using the `./logos restart` wrapper script.
 
@@ -138,9 +150,10 @@ The typical flow: the agent edits a file, sends a message explaining what it cha
 ## Startup flow
 
 1. Initialize SQLite database (create tables if they don't exist)
-2. Register channels (each channel checks for its credentials and connects if present)
-3. Start the scheduler (load heartbeat interval and cron jobs)
-4. Begin processing incoming messages
+2. Discover skills (scan `skills/` for `SKILL.md` files, load names and descriptions)
+3. Register channels (each channel checks for its credentials and connects if present)
+4. Start the scheduler (load heartbeat interval and cron jobs)
+5. Begin processing incoming messages
 
 ## File structure
 
@@ -178,6 +191,9 @@ cron/               # Detailed instructions for complex cron jobs
   consolidate-memories.md
 logos               # Wrapper script (start/stop/restart/status)
 logs/               # Runtime logs (gitignored)
+skills/             # Agent skills (agentskills.io format)
+  self-edit/
+    SKILL.md
 recipes/            # Implementation guides for channels and capabilities
   telegram.md
   whatsapp.md

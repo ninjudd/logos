@@ -115,7 +115,7 @@ Everything else lives in plain files:
 
 **`heartbeat.md`** — A checklist the agent reviews on a regular interval. If nothing needs attention, it moves on. Used for lightweight, recurring monitoring (check inbox, check calendar, etc.).
 
-**`cron.yaml`** — Scheduled tasks. Each entry has a name and a cron expression. Simple jobs include an inline `prompt`. Complex jobs omit the prompt — the scheduler automatically looks for a matching `cron/{name}.md` file.
+**`cron.yaml`** — Scheduled tasks. Top-level `jobs:` key containing a list of jobs. Each job has a `name` and `cron` expression. Simple jobs include an inline `prompt`. Complex jobs omit the prompt — the scheduler automatically looks for a matching `cron/{name}.md` file.
 
 **`cron/`** — Detailed instructions for complex scheduled tasks. Files are matched by convention: a job named `consolidate-memories` reads from `cron/consolidate-memories.md`.
 
@@ -125,7 +125,7 @@ The scheduler handles two types of recurring work:
 
 **Heartbeat** — Runs on a fixed interval (e.g. every 30 minutes). Reads `heartbeat.md` and lets the agent check on things. If nothing needs attention, no tokens are wasted.
 
-**Cron jobs** — Defined in `cron.yaml`. Each job has a cron expression for precise scheduling. When a job fires, the scheduler checks for an inline `prompt` first. If none, it looks for `cron/{name}.md` by convention. The prompt is sent to the agent through the router as a synthetic message.
+**Cron jobs** — Defined in `cron.yaml` under the `jobs:` key. Each job has a `name` and `cron` expression. When a job fires, the scheduler checks for an inline `prompt` first. If none, it looks for `cron/{name}.md` by convention. The prompt is sent to the agent through the router as a synthetic message.
 
 ## Startup flow
 

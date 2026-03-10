@@ -99,7 +99,7 @@ The scheduler handles two types of recurring work:
 - If nothing needs attention, the agent moves on
 
 **Cron jobs:**
-- On startup, parse `cron.yaml` to load scheduled tasks
+- On startup, parse `cron.yaml` — jobs are under the `jobs:` key, each with a `name` and `cron` expression
 - Use `node-cron` or similar to schedule each job
 - When a job fires, check for an inline `prompt` field first. If none, look for `cron/{name}.md` by convention.
 - Send the prompt to the agent through the router as a synthetic message

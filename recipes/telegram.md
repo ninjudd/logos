@@ -22,4 +22,5 @@ Only forward messages where the chat ID matches `TELEGRAM_OWNER_CHAT_ID`. Silent
 ## Notes
 
 - grammY handles long polling natively — no webhook or HTTP server needed
+- `bot.start()` runs long polling and does not resolve until the bot stops — don't await it during registration or it will block startup. Fire and forget it.
 - Supports text, photos, documents, voice messages, and stickers

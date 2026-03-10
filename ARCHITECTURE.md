@@ -196,11 +196,11 @@ recipes/            # Implementation guides for channels and capabilities
 
 ## Adding a channel
 
-A channel is a single file that exports a `register` function. The function takes the router, and returns whether it connected successfully (may be async). Inside `register`, the channel:
+A channel is a single file that exports a `register` function. The function takes the router, and returns the channel's ID, owner conversation ID, and send function if it connected — or nothing if credentials were missing. Inside `register`, the channel:
 
 1. Checks if its credentials exist (e.g., the `TELEGRAM_BOT_TOKEN` environment variable)
-2. If not, returns `false`
-3. If yes, connects to the platform, starts forwarding messages from the owner to the router (ignoring all others), and returns `true`
+2. If not, returns nothing
+3. If yes, connects to the platform, starts forwarding messages from the owner to the router (ignoring all others), and returns its ID, the owner's conversation ID, and a send function
 
 The channel registry imports and registers each channel statically — no runtime file scanning. Adding a new channel means adding the channel file and importing it in the registry.
 
@@ -218,7 +218,7 @@ Implementation details for specific channels and capabilities live in `recipes/`
 ## Security considerations
 
 - The agent runs with shell access and the same permissions as the host user. Consider running it on a dedicated machine or in a container.
-- The **shell tool** runs commands from the project root with a 30-second timeout and a 1 MB output limit. The agent should confirm destructive commands with the user before running them.
+- The **shell tool** runs commands using bash from the project root with a 30-second timeout and a 1 MB output limit. The agent should confirm destructive commands with the user before running them.
 - Messaging credentials are stored as environment variables
 - The SQLite database contains all your messages — protect it accordingly
 

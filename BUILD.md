@@ -62,9 +62,9 @@ The router:
 
 - Accepts incoming messages from channels (channelId, conversationId, text, timestamp)
 - Queues messages per-conversation so only one agent invocation runs per conversation at a time
-- Passes messages to the agent with recent conversation history
+- Stores the inbound message, then retrieves conversation history (which now includes it). Passes only the history to the agent — no separate "current message" parameter. The last message in the history is the one the agent is replying to.
 - If the agent responds with the exact string `NO_REPLY`, discard it — don't store or send anything
-- Otherwise, sends agent responses back via a callback to the originating channel
+- Otherwise, stores the agent's reply and sends it back via a callback to the originating channel
 
 ### 4. Build the agent
 
@@ -73,7 +73,7 @@ Use the Vercel AI SDK's `generateText` for automatic tool execution. Limit the n
 - Use the `@ai-sdk/anthropic` provider by default
 - Read the model from the `AI_MODEL` environment variable with a sensible default
 - The system prompt is assembled from: `SOUL.md` (identity) + `memory.md` (long-term context) + a summary of available skills (names and descriptions from `skills/*/SKILL.md` frontmatter)
-- Pass the message and conversation history, let the SDK handle the rest
+- The agent receives conversation history (the current message is already the last entry). Pass it directly to the SDK as the messages array.
 
 Start with a minimal set of tools:
 

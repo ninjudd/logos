@@ -40,7 +40,7 @@ A personal AI assistant that:
 | Runtime | Node.js 22+ |
 | Language | TypeScript |
 | Database | SQLite (messages only) |
-| AI | Anthropic Claude Agent SDK |
+| AI | Vercel AI SDK with Anthropic provider (model-agnostic) |
 | Hosting | Runs directly on the host — no containers |
 
 These are defaults, not requirements. Fork and change whatever you want.

@@ -14,7 +14,8 @@ The chosen name should be set as `ASSISTANT_NAME` in `.env`. The code should rea
 
 ## Key packages
 
-- `@anthropic-ai/agent-sdk` — **Claude Agent SDK** (not the raw `@anthropic-ai/sdk`). This SDK provides an `Agent` class with built-in tool execution and agentic loops. Do not manually implement a tool loop.
+- `ai` — **Vercel AI SDK**. Provides `generateText` with built-in tool execution via `maxSteps`. Do not manually implement a tool loop.
+- `@ai-sdk/anthropic` — Anthropic provider for the AI SDK (default). Can be swapped for `@ai-sdk/openai`, `@ai-sdk/google`, etc.
 - `better-sqlite3` — SQLite driver
 - `js-yaml` — YAML parsing for `cron.yaml`
 - `node-cron` — cron expression scheduling
@@ -27,8 +28,8 @@ All secrets (API keys, bot tokens) go in `.env` at the project root. This file i
 
 At minimum:
 
-- `ANTHROPIC_API_KEY` — required for the Claude Agent SDK
-- `CLAUDE_MODEL` — model to use (default: `claude-sonnet-4-20250514`)
+- `ANTHROPIC_API_KEY` — required for the default Anthropic provider
+- `AI_MODEL` — model to use (default: latest Claude Sonnet)
 - `ASSISTANT_NAME` — your assistant's name (default: `Logos`)
 
 Channel-specific variables are listed in each recipe.
@@ -63,11 +64,11 @@ The router:
 
 ### 4. Build the agent (`src/agent.ts`)
 
-Use the Claude Agent SDK's `Agent` class — do not manually implement a tool loop. The SDK handles tool execution, retries, and conversation flow natively.
+Use the Vercel AI SDK's `generateText` with `maxSteps` for automatic tool execution. Do not manually implement a tool loop.
 
-- Create an `Agent` instance with tools and a system prompt
+- Use the Anthropic provider by default: `import { anthropic } from "@ai-sdk/anthropic"`
+- Read the model from `process.env.AI_MODEL` with a sensible default
 - The system prompt is assembled from: `SOUL.md` (identity) + `memory.md` (long-term context) + the conversation's file from `conversations/` if one exists
-- Read the model from `process.env.CLAUDE_MODEL` with a sensible default
 - Pass the message and conversation history, let the SDK handle the rest
 
 Start with a minimal set of tools:

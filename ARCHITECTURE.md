@@ -10,7 +10,7 @@ Logos is a single-process personal AI assistant. Messages come in from messaging
 │                                                      │
 │  ┌──────────┐   ┌──────────┐   ┌──────────────┐     │
 │  │ Channels │──▶│  Router  │──▶│    Agent     │     │
-│  │          │◀──│          │◀──│ (Claude SDK) │     │
+│  │          │◀──│          │◀──│  (AI SDK)   │     │
 │  └──────────┘   └──────────┘   └──────┬───────┘     │
 │       │                               │              │
 │       │     ┌───────────┐  ┌──────────┴──────────┐  │
@@ -32,7 +32,7 @@ Logos is a single-process personal AI assistant. Messages come in from messaging
 | Runtime | Node.js 22+ |
 | Language | TypeScript |
 | Database | SQLite (messages only) |
-| AI | Anthropic Claude Agent SDK |
+| AI | Vercel AI SDK (`ai`) with `@ai-sdk/anthropic` (default provider) |
 | Hosting | Runs directly on the host — no containers |
 
 ## Components
@@ -77,13 +77,15 @@ The router is simple glue code. It does not make decisions — it just connects 
 
 ### 3. Agent
 
-The agent is the brain. It uses the Anthropic Claude Agent SDK to:
+The agent is the brain. It uses the Vercel AI SDK to:
 
 - Receive a message and conversation history
 - Decide how to respond, optionally using tools
 - Return a response
 
-**Tools** are capabilities the agent can use: reading files, running shell commands, searching the web, etc. The Claude Agent SDK's `Agent` class handles tool execution and agentic loops natively — do not reimplement this.
+**Tools** are capabilities the agent can use: reading files, running shell commands, searching the web, etc. The AI SDK handles tool execution loops natively via `maxSteps`.
+
+**Model-agnostic:** The default provider is Anthropic (Claude), but switching to OpenAI, Google, or any other provider is a one-line change.
 
 **Per-conversation context:** Each conversation gets its own system prompt and history. A conversation with your family group chat behaves differently than a 1:1 with your work colleague because the context is different.
 
@@ -141,7 +143,7 @@ src/
   tsconfig.json     # TypeScript config
   index.ts          # Entry point — starts everything
   router.ts         # Message routing and conversation queue
-  agent.ts          # Claude Agent SDK wrapper
+  agent.ts          # AI SDK wrapper
   db.ts             # SQLite operations (messages only)
   scheduler.ts      # Heartbeat and cron runner
   channels/

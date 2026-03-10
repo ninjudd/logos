@@ -15,6 +15,13 @@ You can modify your own source code in `src/`. Follow this process carefully.
 
 The restart will type-check your code before applying it. If the check fails, the old process keeps running and the error is logged. You will not crash yourself.
 
+## Reference
+
+Before making changes, read the relevant documentation:
+
+- `ARCHITECTURE.md` — system design, component responsibilities, how pieces fit together
+- `recipes/` — implementation guides for channels and capabilities
+
 ## Rules
 
 - Always explain what you changed before restarting

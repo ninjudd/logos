@@ -6,8 +6,8 @@
 
 ## Environment variables
 
-- `TELEGRAM_BOT_TOKEN` — get this from [@BotFather](https://t.me/BotFather)
-- `TELEGRAM_OWNER_CHAT_ID` — the chat ID of the owner's private conversation with the bot. Send a message to the bot, then check the logs or use [@userinfobot](https://t.me/userinfobot) to find it.
+- `TELEGRAM_BOT_TOKEN` — message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, follow the prompts, and copy the token it gives you. To retrieve an existing token, send `/mybots`, select the bot, and tap "API Token."
+- `TELEGRAM_OWNER_ID` — your Telegram user ID (a number). Message [@userinfobot](https://t.me/userinfobot) on Telegram and it will reply with your ID.
 
 ## Setup
 
@@ -17,7 +17,7 @@
 
 ## Owner filtering
 
-Only forward messages where the chat ID matches `TELEGRAM_OWNER_CHAT_ID`. Silently ignore all other messages.
+Only forward messages where the chat ID matches `TELEGRAM_OWNER_ID`. Silently ignore all other messages.
 
 ## Notes
 

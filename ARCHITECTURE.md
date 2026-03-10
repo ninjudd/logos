@@ -43,8 +43,9 @@ Channels are messaging platform integrations. Each channel is responsible for:
 - Connecting to a messaging platform (WhatsApp, Telegram, Discord, Slack, etc.)
 - Receiving inbound messages and normalizing them into a common format
 - Sending outbound messages from the agent back to the platform
+- Showing a typing indicator while the agent is thinking
 
-**Owner-only:** Each channel knows the owner's ID on that platform (e.g., `TELEGRAM_OWNER_CHAT_ID`). Messages from anyone else are silently ignored. Multi-user support can be added later.
+**Owner-only:** Each channel knows the owner's ID on that platform (e.g., `TELEGRAM_OWNER_ID`). Messages from anyone else are silently ignored. Multi-user support can be added later.
 
 **Self-registering:** A channel only activates if its credentials are present in the environment. No credentials, no channel — no errors, no configuration needed.
 

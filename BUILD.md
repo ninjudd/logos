@@ -86,7 +86,7 @@ Skills are markdown instruction files in `skills/` that follow the [Agent Skills
 ### 5. Build the channel registry
 
 - Import each channel statically and call its `register()` function with the router — no runtime file scanning
-- A channel's `register()` returns the channel's ID, owner conversation ID, and send function if it connected successfully — or nothing if credentials were missing and it skipped
+- A channel's `register()` returns the channel's ID, owner conversation ID, and send function if it connected successfully — or nothing if credentials were missing and it skipped. When skipping, log which environment variables are missing and how to get them (see the recipe).
 - The registry collects connected channels into a map by channel ID so the scheduler can look up any channel's send function and owner conversation ID
 - If no channels connected, the process should exit with a clear error — there's nothing to connect to.
 
@@ -98,7 +98,7 @@ Read the recipe file in `recipes/` for the channel the user chose. Follow its se
 
 - On startup, parse `cron/config.yaml` — jobs are under the `jobs:` key, each with a `name` and `cron` expression
 - Use `node-cron` to schedule each job
-- When a job fires, check for an inline `prompt` field first. If none, look for `cron/{name}.md` by convention.
+- When a job fires, check for an inline `prompt` field first. If none, look for `cron/{name}.md` by convention. Append a reminder to every cron prompt: "If you have nothing to say to the owner, respond with NO_REPLY."
 - Look up the primary channel in the registry to get its send function and owner conversation ID. Send the prompt to the agent through the router as a synthetic message addressed to that conversation.
 
 The heartbeat is just a cron job (`*/30 * * * *`) — no special implementation needed. It's already defined in `cron/config.yaml`.

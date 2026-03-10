@@ -26,5 +26,6 @@ Before making changes, read the relevant documentation:
 
 - Always explain what you changed before restarting
 - Make small, focused changes — one thing at a time
+- For complex or multi-file changes, use the **coding** skill instead
 - If you're unsure about a change, describe it first and ask for confirmation
 - Never modify `.env` or files outside the project directory

@@ -25,6 +25,8 @@ The architecture documents (`ARCHITECTURE.md`, `BUILD.md`), channel recipes, bun
 
 The running agent reads from `spec/` directly for skills and cron defaults. Spec updates take effect on the next agent restart — no copy step, no drift.
 
+`spec/` is **read-only at runtime**. The file-edit tools (`write_file`, `edit_file`) refuse any path under `spec/` regardless of other settings; `shell` carries a description nudge with the same rule. Spec changes happen out-of-band — via PR or via a coding agent invoked outside the running daemon. Instance-specific extensions to skills and cron go in `config/skills/` / `config/cron/`, which the loader merges over `spec/` at startup (config wins).
+
 ### `agent/` — generated implementation
 
 The TypeScript code produced by the bootstrap: `index.ts`, `router.ts`, the channel implementation(s) the user chose, the built-in tool implementations, the wrapper script. Gitignored by this repo. Optionally a separate Git repo if you want to commit your specific implementation.

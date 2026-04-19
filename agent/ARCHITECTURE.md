@@ -243,29 +243,30 @@ agent/
   package.json
   tsconfig.json
   logos               # wrapper script (start/stop/restart/status)
-  src/
+  src/                # top-level engine code (no recipes here)
     index.ts          # entry point
     router.ts
     agent.ts
-    db.ts
     scheduler.ts
-    channels/
-      registry.ts
-      telegram.ts     # one .ts per channel
-      ...
-    tools/
-      read_file.ts
-      remember.ts
-      recall.ts
-      shell.ts
-  channels/           # channel recipes (colocate with src/channels/ when implementations land)
+    threads.ts
+    memory.ts
+  channels/           # implementation + recipe colocated
+    telegram.ts
     telegram.md
+    whatsapp.ts
     whatsapp.md
     ...
-  voice/              # voice capability recipes
+  tools/              # implementation + (optional) recipe colocated
+    read_file.ts
+    remember.ts
+    recall.ts
+    shell.ts
+  voice/              # voice capabilities — implementation + recipe colocated
+    voice-input.ts
     voice-input.md
+    voice-output.ts
     voice-output.md
-  skills/             # bundled skills
+  skills/             # bundled skills (agentskills.io directory format)
     self-edit/
       SKILL.md
     git/
@@ -305,9 +306,27 @@ runtime/
   *.pid
 ```
 
-## Adding a channel
+## Capability layout
 
-A channel is a single `.ts` file plus a colocated `.md` recipe. The `.ts` file exports a `register` function that takes the router and returns the channel's ID, owner conversation ID, and send function if it connected — or nothing if credentials were missing.
+Channels, tools, and voice capabilities all follow the same convention: each capability is a `.ts` implementation file plus an optional colocated `.md` recipe sharing the same basename.
+
+```
+agent/channels/telegram.ts    # implementation
+agent/channels/telegram.md    # recipe (library, env vars, setup, gotchas)
+```
+
+Rules:
+
+- **Filename = capability name.** No central registry. The loader scans the directory for `*.ts` files and registers each one.
+- **Colocation.** The `.md` recipe lives next to the `.ts` it documents. Recipes never name the implementation path explicitly — the path is determined by the recipe's own location.
+- **Recipe is optional.** Built-in tools like `read_file` don't need a recipe; user-facing capabilities like channels and voice do, since they involve external setup.
+- **Two-root scan.** The loader scans both `agent/{capability}/` (bundled) and `config/{capability}/` (instance-specific). On name collision, `config/` wins — the user's version replaces the bundled one.
+
+Skills are different — they follow the [Agent Skills](https://agentskills.io) directory format (`{name}/SKILL.md`), not a flat file. Cron jobs are also different — pure markdown files with frontmatter, no `.ts` companion.
+
+### Adding a channel
+
+A channel's `.ts` file exports a `register` function that takes the router and returns the channel's ID, owner conversation ID, and send function if it connected — or nothing if credentials were missing.
 
 `register()`:
 
@@ -315,9 +334,7 @@ A channel is a single `.ts` file plus a colocated `.md` recipe. The `.ts` file e
 2. If not, returns nothing
 3. If yes, connects, starts forwarding owner messages to the router (ignoring all others), and returns
 
-The channel registry scans `agent/channels/` and `config/channels/` at startup for `*.ts` files and registers each one. No central registry edit needed when adding a channel.
-
-The colocated `.md` recipe documents the library to use, environment variables, setup steps, and any gotchas.
+The colocated recipe documents the library, environment variables, setup steps, and any gotchas.
 
 ## Permissions model
 

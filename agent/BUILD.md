@@ -100,7 +100,7 @@ If `config/SOUL.md` doesn't exist when the agent assembles its system prompt:
 - After the user answers, the agent writes `config/SOUL.md`. Subsequent invocations read it normally.
 - Also ensure `config/`, `memory/`, and `runtime/` directories exist; create them if not.
 
-Start with a minimal set of tools, all in `agent/src/tools/`:
+Start with a minimal set of tools, all in `agent/tools/`:
 
 - **read_file** — read a file from the workspace. Takes a relative path, returns the file contents. Reject paths that escape the workspace root (e.g. `../` or absolute paths).
 - **remember** — append a note to today's file in `memory/journal/` (e.g. `memory/journal/2026-03-09.md`)
@@ -138,7 +138,7 @@ Skills are markdown instruction files following the [Agent Skills](https://agent
 
 ### 6. Build the user's chosen channel
 
-Read the recipe file in `agent/channels/{name}.md` for the channel the user chose. Follow its setup instructions. Implement the channel as `agent/channels/{name}.ts` (colocated with its recipe). The channel must only forward messages from the owner (identified by the owner ID in the recipe's environment variables) and silently ignore everyone else. Get the full loop working end-to-end before adding anything else.
+Read the recipe at `agent/channels/{name}.md` for the channel the user chose and follow its setup instructions. The implementation goes at `agent/channels/{name}.ts` per the colocation convention (see `ARCHITECTURE.md` → Capability layout). The channel must only forward messages from the owner (identified by the owner ID in the recipe's environment variables) and silently ignore everyone else. Get the full loop working end-to-end before adding anything else.
 
 ### 7. Build the scheduler
 

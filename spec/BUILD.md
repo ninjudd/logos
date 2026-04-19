@@ -195,7 +195,7 @@ The `LOGOS_TERMINAL=false` env var disables the channel (same pattern as self-ed
 
 The default heartbeat (`spec/cron/heartbeat.md`, every 30 minutes) and consolidate-memories job (`spec/cron/consolidate-memories.md`, daily at 23:00) ship with the spec.
 
-Add a CLI subcommand `agent/logos cron list` that prints the merged job table with source annotations (`[spec]`, `[config]`, `[spec → overridden by config]`, `[disabled]`).
+Add a CLI subcommand `agent/logos cron` that prints the merged job table with source annotations (`[spec]`, `[config]`, `[spec → overridden by config]`, `[disabled]`).
 
 ### 8. Wire it all together
 
@@ -217,7 +217,7 @@ Create a bash script at `agent/logos` that supports:
 - `agent/logos stop` — stop it
 - `agent/logos restart` — restart it
 - `agent/logos status` — check if it's running
-- `agent/logos cron list` — show the merged cron job table
+- `agent/logos cron` — show the merged cron job table
 - `agent/logos chat [flags]` — connect a terminal client to the running daemon (see step 6b). Passes flags through to `npx tsx agent/src/cli/chat.ts`. Fails fast with "daemon not running; start it with `agent/logos start`" if the daemon PID isn't alive.
 
 The script must be invoked from the workspace root (the parent of `agent/`). It should `cd` to the workspace root if invoked from elsewhere by resolving its own location, then `cd ..` from `agent/`.

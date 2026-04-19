@@ -162,7 +162,7 @@ Check for unread messages that need follow-up. NO_REPLY if nothing to report.
 
 To disable a spec default, drop a config file with the same name and `enabled: false` in frontmatter.
 
-There is no central registry. Adding a job means dropping a file. The merged view (with source annotations) is available via `agent/logos cron list`.
+There is no central registry. Adding a job means dropping a file. The merged view (with source annotations) is available via `agent/logos cron`.
 
 When a job fires, the scheduler looks up the primary channel and sends the merged prompt to the agent through the router as a synthetic message addressed to the owner's main conversation. A reminder is appended: "If you have nothing to say to the owner, respond with NO_REPLY."
 

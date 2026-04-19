@@ -36,9 +36,11 @@ Unix socket at `runtime/logos.sock`. Messages are newline-delimited JSON.
 ```
 {"type": "replay", "role": "user|assistant", "index": N, "text": "..."}
 {"type": "live-start"}                         # caught up; now streaming live
-{"type": "thinking"}                           # optional: agent is working
-{"type": "message", "role": "assistant", "index": N, "text": "..."}
+{"type": "thinking"}                           # logos is processing — render an indicator
+{"type": "message", "role": "user|assistant", "index": N, "text": "..."}
 ```
+
+The `thinking` event is broadcast to all connected clients when a user-originated message is dispatched to the router. It's **cleared implicitly when the next live `message` event arrives** — no explicit "thinking-stop" event needed. Cron-originated messages (heartbeat, etc.) do NOT trigger `thinking`, since no one is waiting on them.
 
 ## Cursor-based replay
 
@@ -69,6 +71,20 @@ None needed. The socket lives in the workspace filesystem; only processes with f
 - The `send` function is called by the router with agent replies. It appends to the JSONL file (which the router already does via `threads.appendMessage`) — no direct socket write needed. All connected clients pick it up via their `fs.watch` subscription.
 - Wait: the router ALREADY calls `appendMessage`. So the channel's `send` doesn't need to write to JSONL. But it DOES need to watch the JSONL file so it can push new lines to connected clients. Separate concerns: the channel maintains one `fs.watch` per connected client (or one watch shared across clients — implementation choice).
 - On daemon shutdown, close all client sockets and remove the socket file.
+
+### Thinking indicator
+
+When the channel receives a user message from a connected client and dispatches it to the router, broadcast `{"type": "thinking"}` to all connected clients (including other clients watching the same conversation). Sequence per user turn:
+
+1. Client sends `{"type": "message", "text": "..."}`.
+2. Channel forwards to the router (which appends to the JSONL file → fs.watch broadcasts the user echo to all clients).
+3. Channel broadcasts `{"type": "thinking"}` to all clients.
+4. Agent processes; channel's `send` is eventually called with the reply (which appends to the JSONL → fs.watch broadcasts the assistant message).
+5. Clients render the assistant message and clear the thinking indicator implicitly.
+
+Don't broadcast `thinking` for messages that arrive via channels other than this one (e.g., the user typing in Telegram while a terminal is connected) — only for messages this channel itself dispatched. Cron-originated messages also skip the indicator (no one is waiting).
+
+If the agent invocation fails or returns NO_REPLY (no `send` call), the thinking indicator stays stuck. Mitigate with a server-side timeout: if no live `message` arrives for the conversation within ~60 seconds of broadcasting `thinking`, broadcast a synthetic `{"type": "message", "role": "assistant", "text": "(no reply)", "index": -1}` or just let the client decide to time out the indicator after ~60s. Client-side timeout is simpler and adequate.
 
 ## Client (`agent/logos chat`)
 
@@ -113,3 +129,15 @@ The loop should feel like a normal chat: the user types a line, sees it rendered
 - **Assistant reply arrives:** render as `logos:` + body (wrapped, markdown applied).
 - **Async output collision:** readline may have the `> ` prompt drawn when an assistant message or another client's echo arrives. Before printing any async output, clear the current line (`readline.cursorTo(out, 0); readline.clearLine(out, 0);`), print the message, then `rl.prompt()` again. Otherwise the prompt and message smash onto the same line (`> logos: ...`).
 - **Labels:** use consistent labels for user and assistant in the transcript. `you:` and `logos:` (or equivalent — pick one style and use it everywhere). The input prompt (`> `) is visual, not a label; it never appears in the rendered transcript.
+
+### Thinking indicator (client)
+
+On `{"type": "thinking"}`:
+
+- Render an indicator on a transient line below any visible content — e.g., `logos is thinking…` in dim styling. Animate the trailing dots (cycle `.`, `..`, `…`) on a ~400 ms interval so the user sees activity.
+- Use the same async-output discipline as messages: clear the prompt line before drawing the indicator, then redraw the prompt + in-progress input below it. Or render the indicator *as the prompt suffix* — implementation choice, but it must not interfere with typing.
+- **Clear the indicator** when:
+  - The next `{"type": "message"}` arrives — clear immediately, then render the message and re-prompt.
+  - A client-side timeout elapses (~60 s with no message) — clear the indicator, render `[no reply]` in dim styling, re-prompt. Avoids a stuck indicator if the agent crashed or produced `NO_REPLY`.
+- Stop the animation interval whenever the indicator is cleared (don't leak timers).
+- Only one thinking indicator at a time per client; if a second `thinking` arrives while one is active, just reset the timeout.

@@ -6,7 +6,7 @@ schedule: "*/30 * * * *"
 
 Check `memory/tasks/heartbeat.md` for pending work. If the file doesn't exist, there's nothing to do — reply with exactly `NO_REPLY`.
 
-When the file exists, it has two sections:
+When the file exists, it can have two sections (both optional):
 
 ## One-shot
 

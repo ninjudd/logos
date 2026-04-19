@@ -102,15 +102,14 @@ The client formats assistant replies for terminal readability:
 
 Re-render the *entire* assistant message after the wrapping pass — otherwise partial ANSI codes from one line can leak into the next.
 
-### Chat flow and echo suppression
+### Chat flow
 
-The loop should feel like a normal chat: the user types a line, sees the assistant reply, types the next line. Specifically:
+The loop should feel like a normal chat: the user types a line, sees it rendered in the transcript, the assistant replies, type the next line. All messages (user and assistant, live and replay) go through the **same render path** — the transcript is a canonical record of the conversation, regardless of which client sent what.
 
-- **Prompt:** `> ` (just the prompt character — no `you>` prefix). This is what the user sees before typing.
-- **After Enter:** the user's typed line is already on screen (readline drew it). The client sends the message and waits.
-- **Echo suppression:** the server's `fs.watch` broadcasts EVERY new line, including the user's own message. The client **MUST NOT re-render** the user's own just-sent message — the user already saw it on the prompt line. Suppress by matching recently-sent outgoing text within a short window (e.g. last 10 seconds, FIFO queue of pending sends; when a live `role: "user"` message matches the front of the queue, skip rendering and pop). This is pragmatic for a single-client setup; cross-client visibility can be improved later by tagging broadcasts with an origin.
-- **During replay:** render all roles (user AND assistant). Replay exists to show the user their history; suppression only applies to *live* `role: "user"` messages.
-- **After assistant reply:** redraw the `> ` prompt for the next turn.
-- **Async output collision:** readline may have the `> ` prompt drawn when an assistant message arrives. Before printing, clear the current line (`readline.cursorTo(out, 0); readline.clearLine(out, 0);`), print the message, then `rl.prompt()` again. Otherwise the prompt and message smash onto the same line (`> logos: ...`).
-
-Assistant messages are rendered with a single-line prefix like `logos:` followed by the body (wrapped, markdown applied). No `you:` or `you>` prefix appears in the rendered output anywhere — only in replay of historical user messages, and even then, plain text (no bold label) is fine.
+- **Prompt:** `> ` (just the prompt character). This is what the user sees before typing.
+- **On Enter (before sending):** the user's typed line is visible on the prompt line (`> hello?`). The client then **clears that line** with an ANSI sequence (`\x1b[1A\r\x1b[2K` — cursor up one line, carriage return, clear line) so the line can be redrawn uniformly by the render path when the server echoes it back. Otherwise the same message appears twice — once as raw typed input, once as the rendered echo.
+- **Send to server** as `{type: "message", text: "..."}`.
+- **Server echoes via `fs.watch`:** the JSONL append triggers a broadcast; the client receives a `{type: "message", role: "user", ...}` event and renders it normally (e.g. `you: hello?`). Same render path as replay. This also means other connected clients see your message — cross-client visibility is free.
+- **Assistant reply arrives:** render as `logos:` + body (wrapped, markdown applied).
+- **Async output collision:** readline may have the `> ` prompt drawn when an assistant message or another client's echo arrives. Before printing any async output, clear the current line (`readline.cursorTo(out, 0); readline.clearLine(out, 0);`), print the message, then `rl.prompt()` again. Otherwise the prompt and message smash onto the same line (`> logos: ...`).
+- **Labels:** use consistent labels for user and assistant in the transcript. `you:` and `logos:` (or equivalent — pick one style and use it everywhere). The input prompt (`> `) is visual, not a label; it never appears in the rendered transcript.

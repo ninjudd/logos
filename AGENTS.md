@@ -32,7 +32,7 @@ Core tools are defined in code under `agent/src/tools/`:
 - **read_file** `(path)` — read any file in the workspace
 - **write_file** `(path, content, mode)` — `create`, `append`, or `replace`
 - **edit_file** `(path, old_string, new_string)` — surgical find-and-replace
-- **find_memory** `(name)` — resolve a wiki-link name to a path; returns `{ path, backlinks }` or `null` (no lazy-create)
+- **find_memory** `(name)` — resolve a wiki-link name; returns `{ found: true, path, backlinks }` on hit or `{ found: false }` on miss (no lazy-create)
 - **remember** `(text)` — sugar for appending to today's journal at `memory/journal/{date}.md`
 - **shell** `(cmd)` — run a shell command on the host (use responsibly)
 

@@ -98,11 +98,28 @@ The agent is the brain. It uses the Vercel AI SDK to receive a message + history
 - `read_file(path)` — read any file in the workspace
 - `write_file(path, content, mode)` — `create` (fail if exists), `append`, or `replace` (overwrite)
 - `edit_file(path, old_string, new_string)` — surgical find-and-replace; `old_string` must appear exactly once
-- `find_memory(name)` — resolve a wiki-link-style name (or alias) to a path. Returns `{ path, backlinks }` or `null` if not found. **Does NOT lazy-create** — the agent decides whether and where to create a missing note via `write_file`.
+- `find_memory(name)` — resolve a wiki-link-style name (or alias) to a path. Returns `{ found: true, path, backlinks }` on hit or `{ found: false }` on miss (see [Tool return shapes](#tool-return-shapes)). **Does NOT lazy-create** — the agent decides whether and where to create a missing note via `write_file`.
 - `remember(text)` — sugar for appending to today's journal at `memory/journal/{YYYY-MM-DD}.md`
 - `shell(cmd)` — run a shell command (1 MB output limit)
 
 Users can add their own tools in `config/src/tools/`; both directories are loaded at startup. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
+
+#### Tool return shapes
+
+Tool return values get JSON-serialized and shown to the model. Two conventions:
+
+- **Tools that succeed-or-throw** (`read_file`, `write_file`, `edit_file`, `remember`, `shell`) return their result on success and throw on failure. The AI SDK reports the throw to the model as an error.
+- **Tools that succeed-or-miss** (anything that does lookup, including `find_memory`) return a **discriminated union** with a boolean tag — never a bare `null`. The tag makes the shape unambiguous to the model and leaves room to add diagnostic fields later (e.g., suggestions for fuzzy matches).
+
+`find_memory` specifically:
+
+```ts
+type FindMemoryResult =
+  | { found: true; path: string; backlinks: string[] }
+  | { found: false };
+```
+
+Do not return `null`, `undefined`, or `{ path: null }`. The shape above is the contract.
 
 **Skills** are markdown instruction files that teach the agent how to accomplish complex tasks using its tools. Bundled skills live in `spec/skills/`, instance-specific skills in `config/skills/`. Both directories are scanned at startup; on name collision, `config/` wins.
 
@@ -219,7 +236,7 @@ Forward links use the wiki-link syntax:
 
 Backlinks are not stored. They're computed by scanning all `memory/**/*.md` for `[[...]]` references and building a reverse index. The graph is cached at `runtime/memory-graph.json` and rebuilt when memory files change (mtime check at startup).
 
-The `find_memory` tool returns both a file's path and its backlinks ("files that reference this one"), letting the agent traverse the graph naturally.
+The `find_memory` tool returns a file's path and its backlinks ("files that reference this one") on hit — see the exact return shape under [Tool return shapes](#tool-return-shapes). This lets the agent traverse the graph naturally.
 
 ### Loading into context
 

@@ -112,7 +112,11 @@ Six tools live in `agent/src/tools/`:
   - `append` — append to the end (insert a `\n` separator if the existing file doesn't end with one)
   - `replace` — overwrite the whole file
 - **edit_file** `(path, old_string, new_string)` — surgical find-and-replace. `old_string` must appear exactly once in the file, otherwise the call fails (forces the agent to add surrounding context for uniqueness). Cheaper than full rewrites for small updates.
-- **find_memory** `(name)` — resolve a wiki-link-style name (or alias) to a path under `memory/` using the link resolver (see step 4b). Returns `{ path, backlinks }` when found, or `null` when not found. **Does not lazy-create.** When the agent wants a new note, it picks a path and uses `write_file` with `mode: "create"`.
+- **find_memory** `(name)` — resolve a wiki-link-style name (or alias) to a path under `memory/` using the link resolver (see step 4b). Returns a discriminated union — **never `null`**:
+  - On hit: `{ found: true, path: "memory/...", backlinks: ["memory/..."] }`
+  - On miss: `{ found: false }`
+
+  The `found` boolean makes the shape unambiguous to the model and leaves room to add diagnostic fields (e.g. fuzzy-match suggestions) later. **Does not lazy-create.** When the agent wants a new note, it picks a path and uses `write_file` with `mode: "create"`.
 - **remember** `(text)` — sugar for appending to today's journal at `memory/journal/{YYYY-MM-DD}.md`. Equivalent to `write_file` with that path in `append` mode; kept as a separate tool because journaling is the most common write pattern.
 - **shell** `(cmd)` — run a shell command asynchronously using bash on the host (workspace root as cwd, 1 MB output limit). Don't block the event loop. The tool description should tell the agent to let the user know before running long commands, since the conversation pauses during execution.
 
@@ -135,7 +139,7 @@ Build a small memory module (e.g. `agent/src/memory.ts`) with:
 - **Cache** — write the graph to `runtime/memory-graph.json` after building. On startup, check the cache: if all source file mtimes are <= the cache's mtime, use it; otherwise rebuild.
 - **Frontmatter parser** — use `js-yaml` to parse the YAML block between `---` delimiters at the top of each file. Tolerate missing or malformed frontmatter (treat as empty).
 
-The `find_memory` tool wraps the resolver: given a name, return `{ path, backlinks }` (or `null` if not found). The agent then uses `read_file(path)` to fetch contents.
+The `find_memory` tool wraps the resolver. The internal resolver function may return `null` on miss, but the tool wrapper MUST translate that to `{ found: false }` (see the tool return shape above). The agent then checks `result.found`, and if true, uses `read_file(result.path)` to fetch contents.
 
 Skills are markdown instruction files following the [Agent Skills](https://agentskills.io) standard. At startup, scan both `spec/skills/` and `config/skills/` for directories containing `SKILL.md`. Extract the YAML frontmatter block (between `---` delimiters), parse it with `js-yaml` (not regex) to get each skill's `name` and `description`, and include them in the system prompt. On name collision, `config/` wins. When the agent decides to use a skill, it reads the full `SKILL.md` for instructions.
 

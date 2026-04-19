@@ -185,11 +185,16 @@ Skills are markdown instruction files following the [Agent Skills](https://agent
 
 Self-edit is controlled by the `LOGOS_SELF_EDIT` env var (default `true`). Read it once at startup and thread the boolean through the tool loader and skills loader.
 
-When `LOGOS_SELF_EDIT=false`:
+**`spec/` is always read-only at runtime** (regardless of `LOGOS_SELF_EDIT`):
+
+- **`write_file` and `edit_file` always refuse writes under `spec/`.** In the path-safety helper, resolve the target path to absolute; if it lives under `{workspace}/spec/`, throw `spec/ is read-only at runtime; instance-specific changes belong in config/`. No env var disables this — `spec/` is shared design and not appropriate to mutate from the running daemon. The tools can still write to `agent/`, `config/`, `memory/`, and `runtime/` (subject to the self-edit guard below).
+- **`shell` tool description always carries a nudge:** `NOTE: spec/ is read-only at runtime. Do not modify files under spec/ via shell — instance-specific changes belong in config/.` This is convention, not enforcement — for hard enforcement, sandbox `spec/` read-only too.
+
+When `LOGOS_SELF_EDIT=false` (additional layer):
 
 - **Skills loader skips `self-edit`.** When walking `spec/skills/`, filter out the `self-edit` directory before registering. The agent never sees the skill in its system prompt.
-- **`write_file` and `edit_file` refuse writes under `agent/`.** In the path-safety helper that both tools share, add a check: resolve the target path to an absolute path; if it lives under `{workspace}/agent/`, throw with a clear message ("self-edit is disabled; refusing to write under agent/"). The tools can still write to `config/`, `memory/`, and `runtime/`.
-- **`shell` tool description gets a nudge.** When disabled, the `shell` tool's description (what the model sees) includes: "NOTE: self-edit is disabled. Do not modify files under `agent/`." This is best-effort — shell can still technically write anywhere the process user can. Document this limitation in the tool description itself so the model knows it's convention, not enforcement.
+- **`write_file` and `edit_file` refuse writes under `agent/`** (in addition to the always-on `spec/` guard). Same path-safety helper, same shape of error. The tools can still write to `config/`, `memory/`, and `runtime/`.
+- **`shell` tool description gets a second nudge appended** (in addition to the always-on `spec/` nudge): `NOTE: self-edit is disabled. Do not modify files under agent/.`
 
 **These are application-level guards, not OS-level enforcement.** A determined agent with `shell` can bypass them. For guaranteed enforcement, sandbox the process — see the Sandboxing section at the end of this document.
 

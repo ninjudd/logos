@@ -76,7 +76,7 @@ Channels are messaging platform integrations. Each channel:
 
 **Main chat:** The `PRIMARY_CHANNEL` environment variable names the channel used for the owner's main conversation (e.g., `telegram`). The scheduler sends replies to the owner's conversation on this channel.
 
-**Recipes vs implementations:** Channel **recipes** (`.md` setup guides) live in `spec/channels/` — they describe how to build each channel. Channel **implementations** (`.ts` code) live in `agent/src/channels/` — only the channels the user chose to bootstrap have implementations. Users can add their own channels in `config/src/channels/`.
+**Recipes vs implementations:** Channel **recipes** (`.md` setup guides) live in `spec/channels/` — they describe how to build each channel. Channel **implementations** (`.ts` code) live in `agent/src/channels/`. Both built-in channels (generated from spec recipes by the bootstrap) and custom channels (added by the user) live in the same directory — the `agent/` repo is the user's own implementation, so there's no need for a parallel code location in `config/`.
 
 ### 2. Router
 
@@ -102,7 +102,7 @@ The agent is the brain. It uses the Vercel AI SDK to receive a message + history
 - `remember(text)` — sugar for appending to today's journal at `memory/journal/{YYYY-MM-DD}.md`
 - `shell(cmd)` — run a shell command (1 MB output limit)
 
-Users can add their own tools in `config/src/tools/`; both directories are loaded at startup. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
+Users can add their own tools directly in `agent/src/tools/` — same location as the built-in tools. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
 
 #### Tool return shapes
 
@@ -186,7 +186,7 @@ All plain files spread across the domains:
 - **`config/SOUL.md`** — identity. The agent writes this on first run after asking the user for a name and personality. Read on every invocation.
 - **`config/cron/`** — instance-specific scheduled jobs (markdown).
 - **`config/skills/`** — instance-specific skills (markdown, agentskills.io directory format).
-- **`config/src/channels/`, `config/src/tools/`** — instance-specific channel and tool implementations (TypeScript, with optional colocated `.md` recipes).
+- **Custom channels and tools** live in `agent/src/channels/` and `agent/src/tools/` alongside the built-in ones — `config/` holds no code.
 - **`memory/`** — granular markdown files of long-term knowledge. See **Memory format** below.
 - **`memory/journal/`** — daily scratch pad files (e.g., `memory/journal/2026-03-09.md`). The agent jots notes throughout the day; the consolidate-memories job promotes important items into the rest of `memory/`.
 - **`memory/new/`** — inbox folder. The agent writes new notes here when there's no obvious folder yet (use `write_file` with `mode: "create"`). The consolidate-memories job sorts the inbox into appropriate folders.
@@ -268,8 +268,8 @@ The agent also creates `config/`, `memory/`, and `runtime/` directories on first
 
 1. Ensure `runtime/` directory exists (`runtime/threads/` is created lazily on first message)
 2. Discover skills (scan `spec/skills/` and `config/skills/` for `SKILL.md` files; load names and descriptions; config overrides spec on name collision)
-3. Discover tools (scan `agent/src/tools/` and `config/src/tools/`; same merge rules)
-4. Register channels (scan `agent/src/channels/` and `config/src/channels/`; each checks for credentials and connects if present). If no channels connect, exit with an error.
+3. Discover tools (scan `agent/src/tools/`)
+4. Register channels (scan `agent/src/channels/`; each checks for credentials and connects if present). If no channels connect, exit with an error.
 5. Start the scheduler (scan `spec/cron/` and `config/cron/`; merge by filename per the layering rules above)
 6. If `config/SOUL.md` doesn't exist, run first-run flow
 7. Begin processing incoming messages
@@ -315,10 +315,10 @@ agent/
     scheduler.ts
     threads.ts
     memory.ts
-    channels/         # implementations only — recipes are in spec/channels/
-      telegram.ts     # only for channels the user chose
+    channels/         # built-in + custom channels (built-in generated from spec/channels/ recipes)
+      telegram.ts
       ...
-    tools/            # built-in tool implementations
+    tools/            # built-in + custom tools
       read_file.ts
       write_file.ts
       edit_file.ts
@@ -326,15 +326,12 @@ agent/
       remember.ts
       shell.ts
 
-# Behavior — gitignored, optionally a separate repo
+# Behavior — gitignored, optionally a separate repo. Markdown only — no code.
 config/
   SOUL.md             # written on first run
   .env                # secrets
   cron/               # instance-specific or override jobs (markdown)
   skills/             # instance-specific skills (markdown)
-  src/                # instance-specific TypeScript code
-    channels/         # custom channel implementations + optional recipes
-    tools/            # custom tool implementations + optional recipes
 
 # Durable state — gitignored, optionally a separate repo
 memory/
@@ -359,25 +356,25 @@ runtime/
 
 ## Capability layout
 
-Channels and tools each have **recipes** (markdown setup guides) and **implementations** (TypeScript code). The split:
+Channels and tools are **code** — they live in `agent/src/`, which is the user's own implementation repo. Skills and cron are **behavior configuration** — markdown-only, layered between `spec/` (defaults) and `config/` (user overrides).
 
-| | Recipes | Implementations |
+| | Code layout | Layered? |
 |---|---|---|
-| **Built-in** | `spec/channels/{name}.md` | `agent/src/channels/{name}.ts` |
-| **Custom (user)** | `config/src/channels/{name}.md` (optional) | `config/src/channels/{name}.ts` |
+| **Channels** | `agent/src/channels/{name}.ts` + colocated `{name}.md` | No — single root |
+| **Tools** | `agent/src/tools/{name}.ts` | No — single root |
+| **Skills** | `spec/skills/{name}/SKILL.md` (built-in) and `config/skills/{name}/SKILL.md` (user) | Yes — two-root, config wins |
+| **Cron** | `spec/cron/{name}.md` (default) and `config/cron/{name}.md` (override) | Yes — two-root, frontmatter override + body append |
 
-Same pattern for tools (`spec/tools/`, `agent/src/tools/`, `config/src/tools/`) — though built-in tools generally don't need recipes since they're for engine-internal use.
+The asymmetry is intentional:
+
+- **Code lives in `agent/` because `agent/` is the user's repo.** Built-in channels (generated from spec recipes during bootstrap) and custom channels (added by the user) live in the same directory. There's no need for a separate "user extension" location because the user already owns `agent/`.
+- **Skills and cron live partly in `spec/` because they're behavior the spec ships with defaults for** (e.g., the heartbeat job, the `self-edit` skill). A user can override a default by dropping a same-named file in `config/`. No code means no node_modules or compilation — pure markdown layering.
 
 Rules:
 
-- **Filename = capability name.** No central registry. The loader scans the directory for `*.ts` files and registers each one.
-- **Two-root scan for implementations.** The loader scans both `agent/src/{capability}/` (built-in) and `config/src/{capability}/` (instance-specific). On name collision, `config/` wins.
+- **Filename = capability name.** No central registry. The loader scans the directory for `*.ts` files (channels, tools) or `*.md` files / `{name}/SKILL.md` (cron, skills) and registers each one.
 - **Recipes describe; implementations execute.** A recipe in `spec/channels/telegram.md` tells the bootstrap how to build `agent/src/channels/telegram.ts`. Recipes never name the implementation path explicitly — the path is determined by their own location.
-- **Custom additions can colocate freely.** A user adding a channel in `config/src/channels/` can put both `.ts` and optional `.md` there together — no separate spec/ recipe needed since they're authoring the implementation directly.
-
-Skills follow the [Agent Skills](https://agentskills.io) directory format (`{name}/SKILL.md`). Bundled skills live in `spec/skills/`, instance-specific skills in `config/skills/`. Both are pure markdown — no `.ts` companions. The loader scans both directories; config wins on collision.
-
-Cron jobs are pure markdown files with frontmatter (`spec/cron/`, `config/cron/`).
+- **Custom channels don't need spec recipes.** A user adding a channel directly to `agent/src/channels/` can colocate the optional `.md` alongside it, or skip the recipe entirely.
 
 ### Adding a channel
 
@@ -389,9 +386,13 @@ A channel's `.ts` file exports a `register` function that takes the router and r
 2. If not, returns nothing
 3. If yes, connects, starts forwarding owner messages to the router (ignoring all others), and returns
 
-To add a built-in channel: write a recipe in `spec/channels/`, then re-bootstrap (the coding agent reads the recipe and produces `agent/src/channels/{name}.ts`).
+To add a channel: write `agent/src/channels/{name}.ts`. If it's reusable, also write a recipe at `spec/channels/{name}.md` so future users can bootstrap it.
 
-To add a custom channel without a spec: write `config/src/channels/{name}.ts` directly, optionally with a colocated `.md` recipe.
+### Applying spec updates
+
+**Re-bootstrap is not idempotent.** Bootstrap is a one-time operation that initializes `agent/`. When the spec updates and you want the changes in your existing `agent/`, point a coding agent at the updated spec and ask it to apply the delta: "Here's my current `agent/`, here's the updated `spec/`. Update the code to match the new spec, preserving my custom additions."
+
+This keeps the bootstrap simple (no manifest tracking, no merge logic) and makes spec updates explicit — you see the diff, you approve the changes.
 
 ## Permissions model
 

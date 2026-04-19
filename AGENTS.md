@@ -36,7 +36,7 @@ Core tools are defined in code under `agent/src/tools/`:
 - **remember** `(text)` — sugar for appending to today's journal at `memory/journal/{date}.md`
 - **shell** `(cmd)` — run a shell command on the host (use responsibly)
 
-Additional instance-specific tools may be loaded from `config/src/tools/`.
+Custom tools live alongside the built-in ones in `agent/src/tools/`.
 
 ## Skills
 

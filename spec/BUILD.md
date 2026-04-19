@@ -120,7 +120,7 @@ Six tools live in `agent/src/tools/`:
 - **remember** `(text)` — sugar for appending to today's journal at `memory/journal/{YYYY-MM-DD}.md`. Equivalent to `write_file` with that path in `append` mode; kept as a separate tool because journaling is the most common write pattern.
 - **shell** `(cmd)` — run a shell command asynchronously using bash on the host (workspace root as cwd, 1 MB output limit). Don't block the event loop. The tool description should tell the agent to let the user know before running long commands, since the conversation pauses during execution.
 
-The tool loader should also scan `config/src/tools/` for `*.ts` files and register any custom tools defined there.
+Custom tools are added by dropping `.ts` files directly into `agent/src/tools/` alongside the built-in ones. The loader scans that single directory.
 
 #### 4b. Memory graph
 
@@ -145,7 +145,7 @@ Skills are markdown instruction files following the [Agent Skills](https://agent
 
 ### 5. Build the channel registry
 
-- Scan `agent/src/channels/` and `config/src/channels/` for `*.ts` files at startup. For each, dynamically import and call its `register()` function with the router. No manual registration list — channels are discovered.
+- Scan `agent/src/channels/` for `*.ts` files at startup. For each, dynamically import and call its `register()` function with the router. No manual registration list — channels are discovered. Both built-in channels (generated from spec recipes) and custom channels live in the same directory.
 - A channel's `register()` returns the channel's ID, owner conversation ID, and send function if it connected successfully — or nothing if credentials were missing and it skipped. When skipping, log which environment variables are missing and how to get them (see the recipe in `spec/channels/{name}.md`).
 - The registry collects connected channels into a map by channel ID so the scheduler can look up any channel's send function and owner conversation ID
 - If no channels connected, the process should exit with a clear error — there's nothing to connect to.

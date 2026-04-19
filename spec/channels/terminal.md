@@ -66,7 +66,7 @@ None needed. The socket lives in the workspace filesystem; only processes with f
 
 ## Client (`agent/logos chat`)
 
-Lives at `agent/src/cli/chat.ts` — isolated from the rest of the codebase. Only imports `node:net`, `node:fs/promises`, `node:readline`, and the shared protocol types from `agent/src/channels/terminal-protocol.ts`. Does not import the router, agent, memory, or any other engine code.
+Lives at `agent/src/cli/chat.ts` — isolated from the rest of the codebase. Only imports `node:` standard library and the shared protocol types from `agent/src/channels/terminal-protocol.ts`. Does not import the router, agent, memory, or any other engine code. May additionally import thin npm packages for rendering (see below).
 
 Flags:
 
@@ -78,3 +78,20 @@ Flags:
 Exit with `Ctrl+D`, `/quit`, or `/exit`. Client disconnect doesn't affect the daemon.
 
 If the daemon isn't running, `chat` fails fast with: `error: daemon not running. Start it with "agent/logos start".` Don't auto-start.
+
+### Rendering
+
+The client formats assistant replies for terminal readability:
+
+- **Word-boundary wrapping.** Wrap output at the terminal width (`process.stdout.columns`, defaulting to 80 if unavailable). Preserve leading whitespace so indented content (list items, code blocks) lines up correctly on continuation lines. ANSI escape codes must not count toward visible width. Use a small well-maintained package such as [`wrap-ansi`](https://www.npmjs.com/package/wrap-ansi) — don't hand-roll the wrapping logic.
+- **Inline markdown → ANSI.** The agent replies with markdown; render the common inline styles:
+  - `**bold**` / `__bold__` → ANSI bold (`\x1b[1m` … `\x1b[22m`)
+  - `*italic*` / `_italic_` → ANSI italic (`\x1b[3m` … `\x1b[23m`)
+  - `` `code` `` → ANSI inverse or a dim color
+  - Fenced code blocks (```` ``` ````) → indented, colored if you like
+  - Headings (`# Title`) → bold, optionally with a blank line before
+  - Links `[text](url)` → show as `text (url)` or with underline on `text`
+- **User input and control messages** (your own lines, `> ` prompt, `[thinking]` indicators) are plain — no markdown parsing applied.
+- Keep it simple: small regex-based renderer, not a full markdown parser. Block-level features beyond code fences and headings can be passed through as-is.
+
+Re-render the *entire* assistant message after the wrapping pass — otherwise partial ANSI codes from one line can leak into the next.

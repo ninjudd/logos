@@ -86,8 +86,10 @@ Use the Vercel AI SDK's `generateText` for automatic tool execution. Limit the n
 - Read the model from the `AI_MODEL` environment variable with a sensible default
 - The system prompt is assembled from:
   1. `config/SOUL.md` (identity) — if missing, run the first-run flow (see step 4a)
-  2. Long-term memory from `memory/` — read the granular files (or, if `memory/` doesn't exist yet, skip)
-  3. A summary of available skills (names and descriptions from `agent/skills/*/SKILL.md` and `config/skills/*/SKILL.md` frontmatter; config wins on name collision)
+  2. A **memory manifest** — a flat list of every memory file with its name, aliases, tags, and a one-line summary. **Do NOT load full file contents.** The summary comes from (in order): the frontmatter `description:` field, the first H1 heading in the body, or the first ~100 chars of body text. The agent uses `find_memory` and `read_file` to fetch full content on demand.
+  3. The last 24 hours of `memory/journal/` entries inline (these are recent agent-authored notes likely to be relevant; older journal entries appear in the manifest only)
+  4. A summary of available skills (names and descriptions from `agent/skills/*/SKILL.md` and `config/skills/*/SKILL.md` frontmatter; config wins on name collision)
+  5. Today's date — so `remember` and other date-aware behavior work without a tool call
 - The agent receives conversation history (the current message is already the last entry). Pass it directly to the SDK as the messages array.
 - Cap conversation history at 50 messages (most recent) to avoid blowing past token limits. Apply the cap when retrieving history, not in the agent.
 - Guard against oversized prompts. Estimate tokens using a 4:1 character-to-token ratio. First, truncate any individual message over 10,000 tokens. Then, if the total (system prompt + messages) exceeds 150,000 tokens, drop the oldest messages until it fits.
@@ -96,16 +98,21 @@ Use the Vercel AI SDK's `generateText` for automatic tool execution. Limit the n
 
 If `config/SOUL.md` doesn't exist when the agent assembles its system prompt:
 
-- Use a minimal bootstrap system prompt: "You are a new personal AI assistant named Logos. You haven't been configured yet. On your next reply, introduce yourself and ask the user (1) what to call yourself and (2) how you should act — personality, tone, style. Once they answer, use your shell tool to write `config/SOUL.md` with the chosen name and personality. Nothing else belongs in that file — memory, skills, and other context are loaded separately."
+- Use a minimal bootstrap system prompt: "You are a new personal AI assistant named Logos. You haven't been configured yet. On your next reply, introduce yourself and ask the user (1) what to call yourself and (2) how you should act — personality, tone, style. Once they answer, use `write_file` with `mode: \"create\"` to create `config/SOUL.md` with the chosen name and personality. Nothing else belongs in that file — memory, skills, and other context are loaded separately."
 - After the user answers, the agent writes `config/SOUL.md`. Subsequent invocations read it normally.
 - Also ensure `config/`, `memory/`, and `runtime/` directories exist; create them if not.
 
-Start with a minimal set of tools, all in `agent/src/tools/`:
+Six tools live in `agent/src/tools/`:
 
-- **read_file** — read a file from the workspace. Takes a relative path, returns the file contents. Reject paths that escape the workspace root (e.g. `../` or absolute paths).
-- **remember** — append a note to today's file in `memory/journal/` (e.g. `memory/journal/2026-03-09.md`)
-- **recall** — given a note name (or list of names), look up the corresponding files in `memory/` using the link resolver (see step 4b), and return their contents along with their backlinks ("files that reference this note")
-- **shell** — run a shell command asynchronously using bash on the host (workspace root as cwd, 1 MB output limit). Don't block the event loop. The tool description should tell the agent to let the user know before running long commands, since the conversation pauses during execution.
+- **read_file** `(path)` — read a file from the workspace. Takes a relative path, returns the file contents. Reject paths that escape the workspace root (e.g. `../` or absolute paths).
+- **write_file** `(path, content, mode)` — write to a file. Modes:
+  - `create` — fail if the file already exists
+  - `append` — append to the end (insert a `\n` separator if the existing file doesn't end with one)
+  - `replace` — overwrite the whole file
+- **edit_file** `(path, old_string, new_string)` — surgical find-and-replace. `old_string` must appear exactly once in the file, otherwise the call fails (forces the agent to add surrounding context for uniqueness). Cheaper than full rewrites for small updates.
+- **find_memory** `(name)` — resolve a wiki-link-style name (or alias) to a path under `memory/` using the link resolver (see step 4b). Returns `{ path, backlinks }` when found, or `null` when not found. **Does not lazy-create.** When the agent wants a new note, it picks a path and uses `write_file` with `mode: "create"`.
+- **remember** `(text)` — sugar for appending to today's journal at `memory/journal/{YYYY-MM-DD}.md`. Equivalent to `write_file` with that path in `append` mode; kept as a separate tool because journaling is the most common write pattern.
+- **shell** `(cmd)` — run a shell command asynchronously using bash on the host (workspace root as cwd, 1 MB output limit). Don't block the event loop. The tool description should tell the agent to let the user know before running long commands, since the conversation pauses during execution.
 
 The tool loader should also scan `config/tools/` for `*.ts` files and register any custom tools defined there.
 
@@ -118,14 +125,15 @@ Build a small memory module (e.g. `agent/src/memory.ts`) with:
 - **Link resolver** — given a link target (a name, optionally with path hints), find the matching file under `memory/` using these rules in order:
   1. Filename match (without `.md`) or alias match (from frontmatter `aliases:`)
   2. If multiple, pick shortest path, then alphabetical
-  3. If none, lazy-create at `memory/new/{target}.md` with empty frontmatter and body, and return that path
+  3. If none, return null. Do NOT auto-create. The agent decides whether to create a missing note (via `write_file` with `mode: "create"`).
 - **Graph builder** — at startup, scan `memory/**/*.md`, parse frontmatter and `[[...]]` links from each file, build:
   - A name index (filename + aliases → file path)
   - A backlink index (file path → list of files that link to it)
+  - A **manifest** for the system prompt: a flat list of `{ relPath, name, aliases, tags, summary }` for every file. `summary` is the frontmatter `description:` field if present, else the first H1 heading, else the first ~100 chars of body.
 - **Cache** — write the graph to `runtime/memory-graph.json` after building. On startup, check the cache: if all source file mtimes are <= the cache's mtime, use it; otherwise rebuild.
 - **Frontmatter parser** — use `js-yaml` to parse the YAML block between `---` delimiters at the top of each file. Tolerate missing or malformed frontmatter (treat as empty).
 
-The `recall` tool wraps the resolver: given a name, find the file, return its content + its backlinks.
+The `find_memory` tool wraps the resolver: given a name, return `{ path, backlinks }` (or `null` if not found). The agent then uses `read_file(path)` to fetch contents.
 
 Skills are markdown instruction files following the [Agent Skills](https://agentskills.io) standard. At startup, scan both `agent/skills/` and `config/skills/` for directories containing `SKILL.md`. Extract the YAML frontmatter block (between `---` delimiters), parse it with `js-yaml` (not regex) to get each skill's `name` and `description`, and include them in the system prompt. On name collision, `config/` wins. When the agent decides to use a skill, it reads the full `SKILL.md` for instructions.
 

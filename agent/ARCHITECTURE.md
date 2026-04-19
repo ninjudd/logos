@@ -86,7 +86,16 @@ If the agent's response is the exact string `NO_REPLY`, the router discards it. 
 
 The agent is the brain. It uses the Vercel AI SDK to receive a message + history, decide how to respond, optionally use tools, and return a response.
 
-**Tools** are typed capabilities defined in code. The kernel ships four primitives in `agent/src/tools/`: `read_file`, `remember`, `recall`, `shell`. Users can add their own in `config/tools/`; both directories are loaded at startup. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
+**Tools** are typed capabilities defined in code. The kernel ships six primitives in `agent/src/tools/`:
+
+- `read_file(path)` — read any file in the workspace
+- `write_file(path, content, mode)` — `create` (fail if exists), `append`, or `replace` (overwrite)
+- `edit_file(path, old_string, new_string)` — surgical find-and-replace; `old_string` must appear exactly once
+- `find_memory(name)` — resolve a wiki-link-style name (or alias) to a path. Returns `{ path, backlinks }` or `null` if not found. **Does NOT lazy-create** — the agent decides whether and where to create a missing note via `write_file`.
+- `remember(text)` — sugar for appending to today's journal at `memory/journal/{YYYY-MM-DD}.md`
+- `shell(cmd)` — run a shell command (1 MB output limit)
+
+Users can add their own tools in `config/tools/`; both directories are loaded at startup. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
 
 **Skills** are markdown instruction files that teach the agent how to accomplish complex tasks using its tools. Bundled skills live in `agent/skills/`, instance-specific skills in `config/skills/`. Both directories are scanned at startup; on name collision, `config/` wins.
 
@@ -153,7 +162,7 @@ All plain files spread across the four domains:
 - **`config/tools/`, `config/skills/`, `config/channels/`** — instance-specific capability extensions.
 - **`memory/`** — granular markdown files of long-term knowledge. See **Memory format** below for conventions.
 - **`memory/journal/`** — daily scratch pad files (e.g., `memory/journal/2026-03-09.md`). The agent jots notes throughout the day; the consolidate-memories job promotes important items into the rest of `memory/`.
-- **`memory/new/`** — landing folder for files lazily created by `[[wiki-link]]` references. The consolidate-memories job sorts these into appropriate folders.
+- **`memory/new/`** — inbox folder. The agent writes new notes here when there's no obvious folder yet (use `write_file` with `mode: "create"`). The consolidate-memories job sorts the inbox into appropriate folders.
 - **`runtime/`** — `threads/`, `logs/`, `*.pid`, `memory-graph.json` (backlink cache).
 
 ## Memory format
@@ -193,17 +202,29 @@ Forward links use the wiki-link syntax:
 1. Find all files in `memory/` whose filename (without `.md`) equals the link target, or whose `aliases:` list contains it
 2. If exactly one match: that's the link target
 3. If multiple matches: pick the **shortest path**, then alphabetical
-4. If no match: **lazy-create** at `memory/new/{name}.md` with empty frontmatter and body
+4. If no match: return null (no auto-creation). The agent decides whether to create a file via `write_file` and where to put it. This matches Obsidian's spirit — Obsidian only creates a target file when the user *clicks* a missing link, not when one is parsed.
 
 ### Backlinks
 
 Backlinks are not stored. They're computed by scanning all `memory/**/*.md` for `[[...]]` references and building a reverse index. The graph is cached at `runtime/memory-graph.json` and rebuilt when memory files change (mtime check at startup).
 
-The `recall` tool returns both a file's content and its backlinks ("files that reference this one"), letting the agent traverse the graph naturally.
+The `find_memory` tool returns both a file's path and its backlinks ("files that reference this one"), letting the agent traverse the graph naturally.
+
+### Loading into context
+
+Memory is **not loaded eagerly** into the system prompt. Instead, the system prompt includes a **manifest**: a flat list of every memory file with its name, aliases, tags, and a one-line summary. The summary comes from (in order of preference):
+
+1. The frontmatter `description:` field, if present
+2. The first H1 heading in the body
+3. The first ~100 characters of body text
+
+The manifest gives the agent enough context to know what's available. The agent uses `find_memory` and `read_file` to fetch full content on demand, based on conversation context.
+
+**Journal exception:** the last 24 hours of `memory/journal/` entries are included in the system prompt directly, since they're recent agent-authored notes likely to be relevant. Older journal entries appear in the manifest but not inline.
 
 ### Obsidian compatibility
 
-If `memory/` is opened as an Obsidian vault, Obsidian creates a `.obsidian/` directory for vault settings (workspace layout, plugin config). This directory is machine-local and should be in `memory/.gitignore`. Configure Obsidian's "Default location for new notes" → `new/` to match the lazy-create destination.
+If `memory/` is opened as an Obsidian vault, Obsidian creates a `.obsidian/` directory for vault settings (workspace layout, plugin config). This directory is machine-local and should be in `memory/.gitignore`. Configure Obsidian's "Default location for new notes" → `new/` so notes you create in Obsidian land in the same inbox the agent uses.
 
 ## First-run flow
 
@@ -258,8 +279,10 @@ agent/
       ...
     tools/            # implementation + (optional) recipe colocated
       read_file.ts
+      write_file.ts
+      edit_file.ts
+      find_memory.ts
       remember.ts
-      recall.ts
       shell.ts
   skills/             # bundled skills (agentskills.io directory format) — markdown only
     self-edit/
@@ -290,7 +313,7 @@ memory/
   summaries/
   journal/
     2026-03-10.md
-  new/                # lazy-created files (sorted by consolidate-memories)
+  new/                # inbox — agent writes here when no obvious folder yet
 
 # Ephemeral — gitignored, never a repo
 runtime/

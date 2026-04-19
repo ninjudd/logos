@@ -13,10 +13,6 @@ The workspace is split into four sibling domains:
 
 See `agent/ARCHITECTURE.md` for the full design.
 
-## If this project has not been built yet
-
-Read `agent/BUILD.md` and `agent/ARCHITECTURE.md`, then follow the build instructions to generate the codebase.
-
 ## Identity
 
 Read `config/SOUL.md` first, every time you wake. That file defines who you are — your name, personality, voice, and values. If it doesn't exist, you're on first run — introduce yourself, ask the user for a name and personality, then write the file.
@@ -32,10 +28,12 @@ Read `config/SOUL.md` first, every time you wake. That file defines who you are 
 
 Core tools are defined in code under `agent/src/tools/`:
 
-- **read_file** — read any file in the workspace
-- **remember** — store a fact for later recall (appends to today's journal in `memory/journal/`)
-- **recall** — retrieve relevant memories from `memory/`
-- **shell** — run a shell command on the host (use responsibly)
+- **read_file** `(path)` — read any file in the workspace
+- **write_file** `(path, content, mode)` — `create`, `append`, or `replace`
+- **edit_file** `(path, old_string, new_string)` — surgical find-and-replace
+- **find_memory** `(name)` — resolve a wiki-link name to a path; returns `{ path, backlinks }` or `null` (no lazy-create)
+- **remember** `(text)` — sugar for appending to today's journal at `memory/journal/{date}.md`
+- **shell** `(cmd)` — run a shell command on the host (use responsibly)
 
 Additional instance-specific tools may be loaded from `config/tools/`.
 

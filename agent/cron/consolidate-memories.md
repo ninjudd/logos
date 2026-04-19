@@ -7,7 +7,7 @@ schedule: "0 23 * * *"
 Two sources to sweep:
 
 1. Today's scratch pad in `memory/journal/` — promote anything important into structured memory files.
-2. Files in `memory/new/` — these were lazily created by `[[wiki-link]]` references and need to be sorted into appropriate folders (or merged into existing files).
+2. Files in `memory/new/` — the inbox where new notes land when there's no obvious folder yet. Sort them into appropriate folders (or merge them into existing files).
 
 ## What to promote
 
@@ -28,4 +28,4 @@ Two sources to sweep:
 - Use `[[wiki-link]]` syntax to reference other notes by name
 - For files in `memory/new/`: either move them to a sensible folder (e.g., `mv memory/new/coffee.md memory/preferences/`) or merge their content into an existing file and delete the original
 - Remove entries that are outdated or contradicted by new information
-- Keep entries concise — relevant memory files are loaded on each invocation, so brevity matters
+- Keep entries concise — the system prompt loads a manifest of all memory (name + summary), so a clear `description:` field in each file's frontmatter helps future-you retrieve the right note

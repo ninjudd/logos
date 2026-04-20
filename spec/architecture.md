@@ -475,7 +475,7 @@ spec/
       SKILL.md
     scheduling/
       SKILL.md
-    consolidate-memories/
+    consolidation/
       SKILL.md
     memory/
       SKILL.md

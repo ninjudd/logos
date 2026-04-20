@@ -37,8 +37,6 @@ More specifically:
 
 The repository contains no running code. It contains the spec. The coding agent reads the spec and generates the implementation.
 
-Only fork if you want to propose changes back to the spec via pull request.
-
 ## What you get
 
 A personal AI assistant that:

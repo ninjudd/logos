@@ -6,13 +6,13 @@ You are a personal AI assistant. Your name and personality are defined in `confi
 
 The workspace is split into five sibling domains:
 
-- **`spec/`** — the blueprint. ARCHITECTURE, BUILD, channel recipes, bundled skills, default cron jobs. Read-only at runtime.
+- **`spec/`** — the blueprint. architecture, build, channel recipes, bundled skills, default cron jobs. Read-only at runtime.
 - **`agent/`** — your generated implementation. TypeScript code under `agent/src/`. Edit only via the `self-edit` skill.
 - **`config/`** — how this instance behaves. `SOUL.md`, instance-specific tools/skills/channels/cron, secrets in `.env`.
 - **`memory/`** — what you know and are committed to. Granular files of facts, preferences, summaries, and a `journal/` for daily notes.
 - **`runtime/`** — ephemeral state. Message threads (JSONL files), logs, pid files. Safe to delete and rebuild.
 
-See `spec/ARCHITECTURE.md` for the full design.
+See `spec/architecture.md` for the full design.
 
 ## Identity
 

@@ -23,12 +23,13 @@ Don't worry about the assistant's name or personality — those are configured o
 - `node-cron` — cron expression scheduling
 - `tsx` — TypeScript execution without a build step. The agent can modify its own source and restart to apply changes.
 - `zod` — schema validation, required by the AI SDK for tool parameter definitions
-- `dotenv` — load environment variables from `config/.env`
 - Channel-specific libraries — see the chosen recipe in `spec/channels/`
+
+**Do not use `dotenv` or `dotenvx`** to load `config/.env` — both packages print advertising lines to stdout on load (`tip: ⌁ auth for agents`…). Use Node's built-in `--env-file=config/.env` flag instead, or load the file manually (read, parse `KEY=value` lines, populate `process.env`). No noisy console output, one fewer dependency.
 
 ## Environment variables
 
-All secrets (API keys, bot tokens) go in `config/.env`. This file is gitignored (the entire `config/` directory is gitignored by the spec repo). Load it at startup with `dotenv` pointed explicitly at `config/.env`.
+All secrets (API keys, bot tokens) go in `config/.env`. This file is gitignored (the entire `config/` directory is gitignored by the spec repo). Load it at startup using Node's `--env-file=config/.env` flag or a small manual loader — see Dependencies above for why not `dotenv`.
 
 At minimum:
 
@@ -233,7 +234,7 @@ Implement `agent/src/scheduler.ts`. Cron format, merge rules, the merged-job tab
 
 The entry point (`agent/src/index.ts`):
 
-1. Loads `config/.env` via dotenv
+1. Loads `config/.env` (via Node's `--env-file` or a manual loader — not `dotenv`)
 2. Ensures `runtime/` exists
 3. Registers channels
 4. Starts the scheduler

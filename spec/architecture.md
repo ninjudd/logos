@@ -265,7 +265,7 @@ This closes the three failure modes for self-edit: compile errors (caught by typ
 - `write_file` and `edit_file` reject any path that resolves under `agent/` with a clear error.
 - The `shell` tool gets a warning appended to its description: "self-edit is disabled; do not modify files under `agent/`." This is a nudge, not enforcement — the shell tool can still technically write anywhere the process user can.
 
-This is **safety by convention plus tool guards** — enough to prevent accidental or unprompted self-edit. For guaranteed enforcement (e.g. against an adversarial or confused agent), run the process in a sandbox with `agent/` mounted read-only. See `build.md` → Sandboxing for OS-specific notes.
+This is **safety by convention plus tool guards** — enough to prevent accidental or unprompted self-edit. For guaranteed enforcement (e.g. against an adversarial or confused agent), run the process in an OS-level sandbox with `agent/` and `spec/` mounted read-only.
 
 Default is `LOGOS_SELF_EDIT=true`. The capability exists and is well-guarded; users nervous about it flip one env var.
 

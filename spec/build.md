@@ -172,7 +172,7 @@ What you must implement:
 - **Always-on `spec/` write guard** in the path-safety helper: any path under `{workspace}/spec/` throws `spec/ is read-only at runtime; instance-specific changes belong in config/`. Independent of `LOGOS_SELF_EDIT`.
 - **Conditional `agent/` write guard** when `LOGOS_SELF_EDIT=false`: paths under `{workspace}/agent/` throw `self-edit is disabled; refusing to write under agent/`.
 - **Skills loader filter** when `LOGOS_SELF_EDIT=false`: skip the `self-edit` directory in `spec/skills/` so the skill is hidden from the agent's prompt.
-- **Shell tool description nudges**: always include the `spec/` warning; conditionally append the `agent/` warning when `LOGOS_SELF_EDIT=false`. These are conventions, not enforcement — see Sandboxing below for hard enforcement.
+- **Shell tool description nudges**: always include the `spec/` warning; conditionally append the `agent/` warning when `LOGOS_SELF_EDIT=false`. These are conventions, not enforcement.
 
 #### 4d. Sub-agent runner
 
@@ -272,23 +272,7 @@ Run the process with `npx tsx agent/src/index.ts` (not compiled JS). This way th
 
 Use a PID file at `runtime/logos.pid` and write logs to `runtime/logs/`. Both are gitignored. Append to the log file — don't truncate it on restart.
 
-**`stop` must kill the entire process tree, not just the PID file's PID.** `npx tsx agent/src/index.ts` produces a multi-process tree (npm wrapper + tsx node child). If `stop` only kills the npm wrapper, the node child gets re-parented to init and survives — invisible to the wrapper, still polling channels, still firing scheduled jobs. Each `restart` then leaks a zombie daemon.
-
-Walk the tree with `pgrep -P` and kill recursively:
-
-```bash
-kill_tree() {
-  local pid=$1
-  local children
-  children=$(pgrep -P "$pid" 2>/dev/null || true)
-  for child in $children; do
-    kill_tree "$child"
-  done
-  kill -TERM "$pid" 2>/dev/null || true
-}
-```
-
-`pgrep` ships on both macOS and Linux. After SIGTERM, give the process a few seconds to shut down gracefully, then SIGKILL the root PID if it's still alive.
+**`stop` must kill the entire process tree, not just the PID file's PID.** `npx tsx agent/src/index.ts` produces a multi-process tree (npm wrapper + tsx node child). If `stop` only kills the root PID, the children get re-parented to init and survive — invisible to the wrapper, still polling channels, still firing scheduled jobs. Each `restart` then leaks a zombie daemon. The wrapper must walk the process tree (e.g. via `pgrep -P` recursive descent — available on both macOS and Linux) and signal every descendant. Send SIGTERM first, give the tree a few seconds to shut down gracefully, then SIGKILL anything still alive.
 
 **Safe-restart protocol for `restart`** (architecture: see `architecture.md` → Self-modification):
 
@@ -304,7 +288,7 @@ Auto-revert only affects commits the agent itself made between the snapshot and 
 
 ## Before you're done
 
-Verify the build before handing it off. Run these checks outside any sandbox so that tools like `tsx` work normally:
+Verify the build before handing it off:
 
 - `tsc --noEmit` (against `agent/tsconfig.json`) passes with no errors
 - `agent/logos start` with blank credentials fails and shows the error in the terminal
@@ -317,37 +301,6 @@ Verify the build before handing it off. Run these checks outside any sandbox so 
 - `git -C agent status` is clean (no uncommitted changes)
 - `git -C config log --oneline` shows at least one commit; `config/.env` is NOT in the commit
 - `git -C memory log --oneline` shows at least one commit
-
-## Sandboxing (optional, for hard self-edit enforcement)
-
-`LOGOS_SELF_EDIT=false` (step 4c) uses tool-level guards — soft enforcement. A determined agent with `shell` access can bypass them. For guaranteed enforcement, run the process in a sandbox with `agent/` and `spec/` mounted read-only. Pick the approach that fits your OS:
-
-**Linux (read-only bind mount):**
-
-```bash
-sudo mount --bind agent/ agent/
-sudo mount -o remount,ro,bind agent/
-```
-
-Or use `bwrap` / `firejail` to namespace-sandbox the process with a read-only view of `agent/` and `spec/`.
-
-**macOS (`sandbox-exec`):**
-
-```bash
-# sandbox.sb denies all writes under agent/src/
-(version 1)
-(allow default)
-(deny file-write*
-  (subpath "/absolute/path/to/workspace/agent/src"))
-
-sandbox-exec -f sandbox.sb agent/logos start
-```
-
-**Either platform (separate user):**
-
-Run the agent as a user that only has read access to `agent/` and `spec/` on the filesystem. Owner owns the directories; agent user can read + execute but not write.
-
-None of these are wired into the stock build — they're deployment choices for users who need hard enforcement.
 
 ## When you're done
 

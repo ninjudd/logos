@@ -75,14 +75,18 @@ If any of these directories already has a `.git/`, leave it alone — the user i
 
 ### 2. Set up message storage
 
-Implement `agent/src/threads.ts`. Storage format and semantics are defined in `architecture.md` → Storage / Message history.
+Implement `agent/src/threads.ts`. Event schema, `turn_id` grouping, replay semantics, and the render filter are defined in `architecture.md` → Storage / Message history (Event schema).
 
-Two functions to export:
+Functions to export:
 
-- `appendMessage(channelId, conversationId, role, text, timestamp)` — ensure the parent directory exists, then append one JSON line with a trailing `\n`. Use `fs.promises.appendFile`. Sanitize `channelId` and `conversationId` to safe path segments — reject anything with `/`, `..`, or other path-escape characters.
-- `getHistory(channelId, conversationId, limit)` — read the file (return empty if missing), split on newlines, parse each line as JSON, drop empty/malformed lines, return the last `limit` entries.
+- `appendEvent(channelId, conversationId, event)` — append one event to the conversation's JSONL (creating the directory if missing). Sanitize `channelId` and `conversationId` to safe path segments — reject anything with `/`, `..`, or other path-escape characters. Accepts any variant of the event discriminated union.
+- `readEvents(channelId, conversationId, limit?)` — read the file (return `[]` if missing), parse each non-blank line as JSON, drop malformed lines, optionally slice to the last `limit` entries.
+- `buildLlmMessages(events)` — given an ordered event list, produce the AI SDK `CoreMessage[]` to pass to `generateText`. Each event becomes one `CoreMessage` in order; an assistant event with a `tool_calls` field becomes an assistant message whose content is the text plus the tool calls (AI SDK accepts this as a single message with mixed content); `role: "tool"` events become tool messages. `role: "audit"` events (`cron_start`, `cron_end`) are skipped — they're for operator record-keeping, not for the LLM. This is the **correctness fix** that lets the model see the tool calls it actually made.
+- `renderForChannel(events)` — apply the render filter: for each `turn_id`, emit user events as-is and the **last** assistant text of the turn (skipping assistant events whose `text` is empty); drop intermediate assistant texts, assistant events' `tool_calls`, `role: "tool"` events, and `role: "audit"` events. Used by watch-based channels (e.g. terminal). Push-based channels don't call this.
 
-The router serializes per-conversation, so `appendMessage` never has a concurrent writer on the same file. No locking needed.
+The router serializes per-conversation, so `appendEvent` never has a concurrent writer on the same file. No locking needed.
+
+**Cron logs.** The same `appendEvent` / `readEvents` primitives work for cron logs at `runtime/logs/cron/{jobname}/{ISO}.jsonl` — expose a variant (e.g. `appendCronEvent(jobname, timestamp, event)`) that routes to the right path. Sub-agent logs work the same way at the nested paths defined in `architecture.md` → Sub-agents.
 
 ### 3. Build the router
 
@@ -91,7 +95,10 @@ Implement `agent/src/router.ts`. Behavior contract is in `architecture.md` → R
 Implementation:
 
 - Per-conversation queue using a `Map<conversationId, Promise>` so each conversation runs serially.
-- For each inbound message: append to JSONL via `threads.appendMessage`, fetch history via `threads.getHistory`, hand history to the agent, append the assistant reply to JSONL, call `channel.send(conversationId, reply)`.
+- **`turn_id` assignment.** User events and the assistant invocation that responds get **different** `turn_id`s. Every event from the same invocation (the user message, or the assistant's multi-step response) shares one `turn_id`. Generate a fresh id at each invocation boundary (uuid or a timestamp-based id).
+- For each inbound message: generate a `turn_id`, append the user event via `threads.appendEvent`, read recent events via `threads.readEvents`, build LLM messages via `threads.buildLlmMessages`, call the agent (passing a fresh `turn_id` for its invocation).
+- The agent runs its multi-step loop. As it produces assistant steps (text + tool calls) and tool results, append each as its own event with the agent's `turn_id`.
+- After the agent returns, the final assistant text has already been appended. Extract it and call `channel.send(conversationId, reply)`.
 - The reply is stored and sent **as-is** — including the literal string `NO_REPLY`. No translation. Channels detect `NO_REPLY` themselves per the contract.
 
 ### 4. Build the agent
@@ -136,7 +143,7 @@ Bundled tools to build (each has a recipe):
 
 Implementation conventions:
 
-- **Path-safety helper** — share a single `agent/src/tools/_paths.ts` (or similar) used by every path-taking tool. The helper resolves to absolute, rejects paths escaping the workspace root, and enforces the `spec/` and `agent/` write guards (see `architecture.md` → Self-modification for what those guards are and when they apply).
+- **Paths helper** — share a single module (`agent/src/paths.ts`) used by every path-taking tool. The helper resolves to absolute, rejects paths escaping the workspace root, and enforces the `spec/` and `agent/` write guards (see `architecture.md` → Self-modification for what those guards are and when they apply).
 - **Memory graph cache invalidation** — any tool that writes under `memory/` (`write_file`, `edit_file`, `remember`, `add_memory`, `rename_memory`) must delete `runtime/memory-graph.json` so the next graph operation rebuilds.
 - **Resolution-preservation helper** — `add_memory` and `rename_memory` share the same pre/post snapshot → rewrite-changed-resolutions algorithm. Extract it as a single helper in `agent/src/memory.ts` and call it from both tools.
 - **Tool return shapes** follow `architecture.md` → Tool return shapes. Never return bare `null` from a tool.
@@ -162,23 +169,27 @@ Read `LOGOS_SELF_EDIT` once at startup and thread the boolean through the tool l
 
 What you must implement:
 
-- **Always-on `spec/` write guard** in the path-safety helper: any path under `{workspace}/spec/` throws `spec/ is read-only at runtime; instance-specific changes belong in config/`. Independent of `LOGOS_SELF_EDIT`.
+- **Always-on `spec/` write guard** in the paths helper: any path under `{workspace}/spec/` throws `spec/ is read-only at runtime; instance-specific changes belong in config/`. Independent of `LOGOS_SELF_EDIT`.
 - **Conditional `agent/` write guard** when `LOGOS_SELF_EDIT=false`: paths under `{workspace}/agent/` throw `self-edit is disabled; refusing to write under agent/`.
 - **Skills loader filter** when `LOGOS_SELF_EDIT=false`: skip the `self-edit` directory in `spec/skills/` so the skill is hidden from the agent's prompt.
-- **Shell tool description nudges**: always include the `spec/` warning; conditionally append the `agent/` warning when `LOGOS_SELF_EDIT=false`. These are conventions, not enforcement — see Sandboxing below for hard enforcement.
+- **Shell tool description nudges**: always include the `spec/` warning; conditionally append the `agent/` warning when `LOGOS_SELF_EDIT=false`. These are conventions, not enforcement.
 
 #### 4d. Sub-agent runner
 
 Implement `agent/src/agents/runner.ts`. Tool contract is in `spec/tools/delegate_task.md`; design rationale and constraints are in `architecture.md` → Sub-agents.
 
-Single exported function `runSubAgent({ prompt, skills, tools, model })`:
+The runner takes the `delegate_task` inputs (prompt, skills, tools, optional model) plus enough context to write its log to the right place under the caller's log directory: a stable id for this particular call, and a parent-context discriminator describing whether the call originated from a cron run (carrying the job name and run timestamp) or a thread turn (carrying the channel id, conversation id, and turn id). The `delegate_task` tool wrapper knows which one applies and plumbs it through.
 
-- **Resolve skills** by name from `spec/skills/` then `config/skills/` (config wins). Read the FULL `SKILL.md` body. Return `{ ok: false, error }` if any name is missing.
+Behavior:
+
+- **Resolve skills** by name from `spec/skills/` then `config/skills/` (config wins). Read the FULL `SKILL.md` body. On any missing skill, fail the call.
 - **Resolve tools** from the loaded tools map (the same map `agent.ts` builds). **Always strip `delegate_task`** — sub-agents never recurse, regardless of caller request.
 - **Build the system prompt:** framing line + today's date + concatenated skill bodies (NO SOUL.md, NO memory manifest, NO conversation history).
-- **Call `generateText`** with the system prompt, the `prompt` as the user message, the resolved tool subset, the model from the argument or `AI_MODEL`, and a step limit equal to the main agent's (e.g. `stepCountIs(25)`).
-- **Log the invocation** to `runtime/logs/` (or a sub-agents-specific logfile) with timestamp, skills, tools, model, duration, token usage. Do NOT include the prompt or response text — could contain sensitive content.
-- **Return** `{ ok: true, response: text }` or `{ ok: false, error }`.
+- **Compute the sub-agent log path** from the parent context and call id:
+  - Cron parent → `runtime/logs/cron/{jobname}/{timestamp}/{callId}.jsonl`
+  - Thread parent → `runtime/logs/sub-agents/{channelId}/{conversationId}/{turn_id}-{callId}.jsonl`
+- **Call `generateText`** with the assembled system prompt, the prompt as the user message, the resolved tool subset, the model from the argument or `AI_MODEL`, and a step limit equal to the main agent's (e.g. `stepCountIs(25)`). Append every event the sub-agent produces (user prompt, assistant steps, tool calls, tool results) to the sub-agent log using the same event schema as threads and cron logs.
+- **Return** the final assistant text together with the workspace-relative log path. The tool-loop machinery will include this return value in the parent's `tool_result` event automatically — see `spec/tools/delegate_task.md` for the exact return shape.
 
 Framing line for the system prompt:
 
@@ -205,12 +216,16 @@ The `LOGOS_TERMINAL=false` env var disables the channel: the server doesn't bind
 
 ### 7. Build the scheduler
 
-Implement `agent/src/scheduler.ts`. Cron format, merge rules, and the merged-job table are defined in `architecture.md` → Scheduler.
+Implement `agent/src/scheduler.ts`. Cron format, merge rules, the merged-job table, and the per-run log layout are defined in `architecture.md` → Scheduler.
 
 - Scan both `spec/cron/` and `config/cron/`, parse frontmatter with `js-yaml`, merge per the layering rules (frontmatter override, body append; skip when merged `enabled: false`).
 - Use `node-cron` to schedule each enabled job using its merged `schedule` field.
-- When a job fires, append a reminder to the merged body: "If you have nothing to say to the owner, respond with NO_REPLY." Then look up the primary channel and dispatch through the router as a synthetic message addressed to the owner's conversation.
-- **Honor the `history:` frontmatter field** (default `primary`). For `history: none`, dispatch the synthetic message with a flag that tells the router to skip `getHistory` and run the agent with only the synthetic prompt as input. Add a corresponding option to the router's dispatch path.
+- When a job fires:
+   1. Generate a run timestamp `ISO` and open the cron log at `runtime/logs/cron/{jobname}/{ISO}.jsonl`.
+   2. Append a `cron_start` audit event (job name, schedule, `turn_id`, timestamp).
+   3. Append a reminder to the merged body: "If you have nothing to say to the owner, respond with NO_REPLY." Then dispatch through the router as a synthetic message. Pass the cron log file handle so the router can append each agent/tool event to it in addition to the user thread (for `history: primary`) or instead of it (for `history: none`).
+   4. After the agent returns, append a `cron_end` audit event (reply text, `duration_ms`, timestamp).
+- **Honor the `history:` frontmatter field** (default `primary`). For `history: none`, the router skips `readEvents` and runs the agent with only the synthetic prompt as input. The cron log still gets all events; the user thread only gets the final assistant reply (or nothing on `NO_REPLY`).
 - Add a CLI subcommand `agent/logos cron` that prints the merged job table with source annotations (`[spec]`, `[config]`, `[spec → overridden by config]`, `[disabled]`).
 
 ### 8. Wire it all together
@@ -242,23 +257,7 @@ Run the process with `npx tsx agent/src/index.ts` (not compiled JS). This way th
 
 Use a PID file at `runtime/logos.pid` and write logs to `runtime/logs/`. Both are gitignored. Append to the log file — don't truncate it on restart.
 
-**`stop` must kill the entire process tree, not just the PID file's PID.** `npx tsx agent/src/index.ts` produces a multi-process tree (npm wrapper + tsx node child). If `stop` only kills the npm wrapper, the node child gets re-parented to init and survives — invisible to the wrapper, still polling channels, still firing scheduled jobs. Each `restart` then leaks a zombie daemon.
-
-Walk the tree with `pgrep -P` and kill recursively:
-
-```bash
-kill_tree() {
-  local pid=$1
-  local children
-  children=$(pgrep -P "$pid" 2>/dev/null || true)
-  for child in $children; do
-    kill_tree "$child"
-  done
-  kill -TERM "$pid" 2>/dev/null || true
-}
-```
-
-`pgrep` ships on both macOS and Linux. After SIGTERM, give the process a few seconds to shut down gracefully, then SIGKILL the root PID if it's still alive.
+**`stop` must kill the entire process tree, not just the PID file's PID.** `npx tsx agent/src/index.ts` produces a multi-process tree (npm wrapper + tsx node child). If `stop` only kills the root PID, the children get re-parented to init and survive — invisible to the wrapper, still polling channels, still firing scheduled jobs. Each `restart` then leaks a zombie daemon. The wrapper must walk the process tree (e.g. via `pgrep -P` recursive descent — available on both macOS and Linux) and signal every descendant. Send SIGTERM first, give the tree a few seconds to shut down gracefully, then SIGKILL anything still alive.
 
 **Safe-restart protocol for `restart`** (architecture: see `architecture.md` → Self-modification):
 
@@ -274,7 +273,7 @@ Auto-revert only affects commits the agent itself made between the snapshot and 
 
 ## Before you're done
 
-Verify the build before handing it off. Run these checks outside any sandbox so that tools like `tsx` work normally:
+Verify the build before handing it off:
 
 - `tsc --noEmit` (against `agent/tsconfig.json`) passes with no errors
 - `agent/logos start` with blank credentials fails and shows the error in the terminal
@@ -287,37 +286,6 @@ Verify the build before handing it off. Run these checks outside any sandbox so 
 - `git -C agent status` is clean (no uncommitted changes)
 - `git -C config log --oneline` shows at least one commit; `config/.env` is NOT in the commit
 - `git -C memory log --oneline` shows at least one commit
-
-## Sandboxing (optional, for hard self-edit enforcement)
-
-`LOGOS_SELF_EDIT=false` (step 4c) uses tool-level guards — soft enforcement. A determined agent with `shell` access can bypass them. For guaranteed enforcement, run the process in a sandbox with `agent/` and `spec/` mounted read-only. Pick the approach that fits your OS:
-
-**Linux (read-only bind mount):**
-
-```bash
-sudo mount --bind agent/ agent/
-sudo mount -o remount,ro,bind agent/
-```
-
-Or use `bwrap` / `firejail` to namespace-sandbox the process with a read-only view of `agent/` and `spec/`.
-
-**macOS (`sandbox-exec`):**
-
-```bash
-# sandbox.sb denies all writes under agent/src/
-(version 1)
-(allow default)
-(deny file-write*
-  (subpath "/absolute/path/to/workspace/agent/src"))
-
-sandbox-exec -f sandbox.sb agent/logos start
-```
-
-**Either platform (separate user):**
-
-Run the agent as a user that only has read access to `agent/` and `spec/` on the filesystem. Owner owns the directories; agent user can read + execute but not write.
-
-None of these are wired into the stock build — they're deployment choices for users who need hard enforcement.
 
 ## When you're done
 

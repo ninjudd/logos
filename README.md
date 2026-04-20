@@ -27,7 +27,7 @@ The agent reads the spec and generates the assistant.
 
 More specifically:
 
-1. **Create your own copy** — GitHub doesn't allow private forks of public repos, so [import this repository](https://github.com/new/import) as a new private repo instead
+1. **Clone the repo** — `git clone https://github.com/ninjudd/logos.git`. No fork needed; your personal state lives in nested repos (`agent/`, `config/`, `memory/`) created during bootstrap, which are gitignored here.
 2. **Point your AI coding agent at it** (Claude Code, Codex, etc.)
 3. **Tell the agent:** `bootstrap telegram` (or whichever channel you want)
    - The coding agent reads `spec/` and generates the implementation in `agent/`. Approve its edits.
@@ -36,6 +36,8 @@ More specifically:
 6. **Send it a message** — on first run, it'll ask for a name and personality
 
 The repository contains no running code. It contains the spec. The coding agent reads the spec and generates the implementation.
+
+Only fork if you want to propose changes back to the spec via pull request.
 
 ## What you get
 

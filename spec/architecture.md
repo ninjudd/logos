@@ -520,7 +520,7 @@ agent/
       read_thread_tail.ts
       advance_thread_cursor.ts
       find_orphans.ts
-      path-safety.ts  # shared path-safety + self-edit-guard helper
+    paths.ts          # shared path resolution + write guards
     agents/           # sub-agent runner (single generic file, no per-agent definitions)
       runner.ts
 

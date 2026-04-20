@@ -43,5 +43,5 @@ Node standard library.
 
 ## Implementation notes
 
-- Share path-safety + self-edit-guard helpers with `edit_file` and `read_file`.
+- Use the shared `agent/src/paths.ts` helper for path resolution + write guards.
 - The `\n` separator on append matters — without it, two appends concatenate on the same line.

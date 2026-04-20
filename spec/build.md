@@ -143,7 +143,7 @@ Bundled tools to build (each has a recipe):
 
 Implementation conventions:
 
-- **Path-safety helper** — share a single helper module (e.g. `agent/src/tools/path-safety.ts`) used by every path-taking tool. The helper resolves to absolute, rejects paths escaping the workspace root, and enforces the `spec/` and `agent/` write guards (see `architecture.md` → Self-modification for what those guards are and when they apply).
+- **Paths helper** — share a single module (`agent/src/paths.ts`) used by every path-taking tool. The helper resolves to absolute, rejects paths escaping the workspace root, and enforces the `spec/` and `agent/` write guards (see `architecture.md` → Self-modification for what those guards are and when they apply).
 - **Memory graph cache invalidation** — any tool that writes under `memory/` (`write_file`, `edit_file`, `remember`, `add_memory`, `rename_memory`) must delete `runtime/memory-graph.json` so the next graph operation rebuilds.
 - **Resolution-preservation helper** — `add_memory` and `rename_memory` share the same pre/post snapshot → rewrite-changed-resolutions algorithm. Extract it as a single helper in `agent/src/memory.ts` and call it from both tools.
 - **Tool return shapes** follow `architecture.md` → Tool return shapes. Never return bare `null` from a tool.
@@ -169,7 +169,7 @@ Read `LOGOS_SELF_EDIT` once at startup and thread the boolean through the tool l
 
 What you must implement:
 
-- **Always-on `spec/` write guard** in the path-safety helper: any path under `{workspace}/spec/` throws `spec/ is read-only at runtime; instance-specific changes belong in config/`. Independent of `LOGOS_SELF_EDIT`.
+- **Always-on `spec/` write guard** in the paths helper: any path under `{workspace}/spec/` throws `spec/ is read-only at runtime; instance-specific changes belong in config/`. Independent of `LOGOS_SELF_EDIT`.
 - **Conditional `agent/` write guard** when `LOGOS_SELF_EDIT=false`: paths under `{workspace}/agent/` throw `self-edit is disabled; refusing to write under agent/`.
 - **Skills loader filter** when `LOGOS_SELF_EDIT=false`: skip the `self-edit` directory in `spec/skills/` so the skill is hidden from the agent's prompt.
 - **Shell tool description nudges**: always include the `spec/` warning; conditionally append the `agent/` warning when `LOGOS_SELF_EDIT=false`. These are conventions, not enforcement.

@@ -18,6 +18,16 @@
 5. Install the app to your workspace
 6. Install `@slack/bolt`
 
+## Markdown conversion
+
+The assistant writes standard markdown; Slack uses "mrkdwn", a similar but incompatible format. Convert messages before posting with a library like `slackify-markdown`. Key differences:
+
+- `**bold**` → `*bold*`
+- `[text](url)` → `<url|text>`
+- Headings (`#`, `##`, …) → bold line (Slack has no heading syntax)
+
+Code spans, fenced code blocks, blockquotes, and bullet lists are already compatible.
+
 ## Notes
 
 - Socket Mode connects via WebSocket — no HTTP server or public URL needed

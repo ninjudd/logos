@@ -9,11 +9,9 @@ Daily deep consolidation. Distill recent thread activity, the day's journal, and
 
 ## Approach
 
-Do this work in a sub-agent via `delegate_task`. Reading every active thread plus the journal and inbox is a lot of context — keeping it out of your main thread is the whole point. Pass the sub-agent a single instruction along the lines of: "Read the consolidation cursors and unconsolidated tail of every thread under `runtime/threads/`, plus today's `memory/journal/{date}.md` and any files under `memory/new/`. Update memory accordingly, advance cursors, run the orphan check, and return a brief summary." The sub-agent has the full file-edit toolset.
+This job runs with `history: none`, so your context starts clean — no prior conversation history is loaded. Do the work directly using your file tools, then reply with a brief summary (or `NO_REPLY` if nothing notable happened). The summary goes to the user's primary channel.
 
-When the sub-agent returns, post its summary as your reply (or `NO_REPLY` if there was nothing notable). The summary goes to the user's primary channel.
-
-## What the sub-agent should do
+## Steps
 
 ### 1. Threads — cross-thread consolidation
 

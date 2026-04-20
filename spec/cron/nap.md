@@ -9,9 +9,9 @@ Quick, opportunistic per-thread consolidation. Runs hourly. Threshold-gated — 
 
 ## Approach
 
-Do this work in a sub-agent via `delegate_task`. Each consolidation pass reads a thread tail and writes to memory, which uses too much context to do inline. Pass the sub-agent an instruction along the lines of: "Walk `runtime/threads/`. For each thread, compare its current message count to the cursor in the sidecar `*.cursor` file. For any thread where unconsolidated messages ≥ 50, read those messages, write anything worth remembering into `memory/` (creating files, updating existing ones, using `[[wiki-links]]`), then advance the cursor. Skip threads under the threshold. Return a brief summary." The sub-agent has the full file-edit toolset.
+This job runs with `history: none`, so your context starts clean. Walk `runtime/threads/`. For each thread, compare its current message count to the cursor in the sidecar `*.cursor` file (missing means 0). For any thread where unconsolidated messages ≥ 50, read those messages, write anything worth remembering into `memory/` (creating files, updating existing ones, using `[[wiki-links]]`), then advance the cursor. Skip threads under the threshold.
 
-When the sub-agent returns, post its summary as your reply (or `NO_REPLY` if no thread crossed the threshold). The summary goes to the user's primary channel.
+Reply with a brief summary of what was consolidated, or `NO_REPLY` if no thread crossed the threshold. The summary goes to the user's primary channel.
 
 ## Scope
 

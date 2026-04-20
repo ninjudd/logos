@@ -348,10 +348,10 @@ Conversation threads are append-only and grow forever. To keep the agent's worki
 
 **Two-tier consolidation:**
 
-- **`nap`** (hourly, `history: none`) — quick per-thread pass. Walks `runtime/threads/`; for any thread whose unconsolidated message count exceeds a threshold, delegates a focused consolidation pass to a sub-agent via `delegate_task`. Scoped to one thread at a time. Doesn't touch journal or inbox.
-- **`dream`** (daily, `history: none`) — deep full sweep. Delegates to a sub-agent that reads all threads (allowing cross-thread correlations), the day's journal, and the `memory/new/` inbox. Updates memory files, runs the orphan check (every non-root file reachable from a root file via `[[wiki-links]]`), promotes hot content to root level, archives or deletes cold content. Posts a brief summary to the user.
+- **`nap`** (hourly, `history: none`) — quick per-thread pass. Walks `runtime/threads/`; for any thread whose unconsolidated message count exceeds a threshold, reads the unconsolidated tail, writes summaries to memory, and advances the cursor. Scoped to one thread at a time. Doesn't touch journal or inbox.
+- **`dream`** (daily, `history: none`) — deep full sweep. Reads all threads (allowing cross-thread correlations), the day's journal, and the `memory/new/` inbox. Updates memory files, runs the orphan check (every non-root file reachable from a root file via `[[wiki-links]]`), promotes hot content to root level, archives or deletes cold content. Posts a brief summary to the user.
 
-Both jobs delegate to a sub-agent rather than doing the work in the main agent's context — consolidation reads a lot of text and would otherwise pollute the main thread's context window.
+Both jobs run with `history: none`: the agent's context for the invocation starts clean (no prior conversation history is loaded), so the consolidation work doesn't need to be isolated in a sub-agent — the cron invocation itself is already an isolated context. Only the final summary reply lands in the user's thread.
 
 **Consolidation cursors.** A per-thread cursor records how many messages have been consolidated into memory. Stored as a sidecar file next to the thread JSONL: `runtime/threads/{channelId}/{conversationId}.cursor` containing a single integer (the count of consolidated messages from the start of the file). Both `nap` and `dream` read and update these cursors so neither re-consolidates content the other has already processed. Cursors share the runtime lifecycle with the threads — wipe `runtime/` and there's nothing to consolidate either.
 

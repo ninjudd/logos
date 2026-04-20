@@ -37,6 +37,18 @@ More specifically:
 
 The repository contains no running code. It contains the spec. The coding agent reads the spec and generates the implementation.
 
+## Updating from spec
+
+When the spec evolves, sync your implementation the same way you bootstrapped it. Point your coding agent at the workspace and say:
+
+```
+update from spec
+```
+
+The agent pulls the latest `spec/`, diffs it against your `agent/` tree, shows what would change, and applies the edits once you approve. Restart with `agent/logos restart` to pick them up.
+
+Only `agent/` is regenerated. Your `config/`, `memory/`, and `runtime/` are left alone.
+
 ## What you get
 
 A personal AI assistant that:

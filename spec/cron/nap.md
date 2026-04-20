@@ -5,13 +5,11 @@ history: none
 
 # Nap
 
-Quick, opportunistic per-thread consolidation. Runs hourly. Threshold-gated — does nothing unless a thread has accumulated enough new messages to be worth processing.
+Quick, opportunistic per-thread consolidation. Runs hourly, threshold-gated.
 
-## Approach
+Use the `consolidate-memories` skill. Call `list_threads()`, pick any thread where `unconsolidated >= 50`, run the read-tail → distill → advance loop on it. Skip threads under the threshold (don't reply about them).
 
-This job runs with `history: none`, so your context starts clean. Walk `runtime/threads/`. For each thread, compare its current message count to the cursor in the sidecar `*.cursor` file (missing means 0). For any thread where unconsolidated messages ≥ 50, read those messages, write anything worth remembering into `memory/` (creating files, updating existing ones, using `[[wiki-links]]`), then advance the cursor. Skip threads under the threshold.
-
-Reply with a brief summary of what was consolidated, or `NO_REPLY` if no thread crossed the threshold. The summary goes to the user's primary channel.
+Reply with a brief summary of what was consolidated, or `NO_REPLY` if no thread crossed the threshold.
 
 ## Scope
 
@@ -24,6 +22,4 @@ Reply with a brief summary of what was consolidated, or `NO_REPLY` if no thread 
 
 The split exists because per-thread consolidation needs to react quickly to bursts of activity (a long conversation in the morning shouldn't have to wait until 23:00), while full hygiene only needs to run once a day. Both jobs share the same cursor scheme, so neither re-consolidates content the other has already processed.
 
-## Threshold
-
-50 messages of unconsolidated tail is a reasonable starting point. The threshold is what prevents `nap` from doing meaningless work every hour on quiet threads — adjust if it's firing too often or letting threads grow too big between consolidations.
+The threshold of 50 unconsolidated messages is a reasonable starting point — adjust if `nap` is firing too often or letting threads grow too big between consolidations.

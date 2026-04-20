@@ -128,12 +128,15 @@ Implement one tool per recipe under `spec/tools/`. Each recipe is the contract f
 
 Bundled tools to build (each has a recipe):
 
-- `read_file`, `write_file`, `edit_file`, `find_memory`, `remember`, `shell`, `delegate_task`, `web_fetch`
+- Core file/memory/shell: `read_file`, `write_file`, `edit_file`, `find_memory`, `remember`, `shell`
+- Agent control: `delegate_task`, `web_fetch`
+- Consolidation (used by `nap`/`dream` crons): `list_threads`, `read_thread_tail`, `advance_cursor`
+- Memory hygiene: `find_orphans`, `rename_memory`
 
 Implementation conventions:
 
 - **Path-safety helper** — share a single `agent/src/tools/_paths.ts` (or similar) used by every path-taking tool. The helper resolves to absolute, rejects paths escaping the workspace root, and enforces the `spec/` and `agent/` write guards (see `architecture.md` → Self-modification for what those guards are and when they apply).
-- **Memory graph cache invalidation** — any tool that writes under `memory/` (`write_file`, `edit_file`, `remember`) must delete `runtime/memory-graph.json` so the next `find_memory` rebuilds.
+- **Memory graph cache invalidation** — any tool that writes under `memory/` (`write_file`, `edit_file`, `remember`, `rename_memory`) must delete `runtime/memory-graph.json` so the next graph operation rebuilds.
 - **Tool return shapes** follow `architecture.md` → Tool return shapes. Never return bare `null` from a tool.
 
 Custom tools are added by dropping `.ts` files directly into `agent/src/tools/` alongside the built-in ones. Loader scans that single directory.

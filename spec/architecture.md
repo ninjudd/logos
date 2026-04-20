@@ -403,14 +403,23 @@ spec/
     find_memory.md
     remember.md
     shell.md
-    delegate_task.md  # sub-agent runner
-    web_fetch.md      # privacy-aware web fetch
+    delegate_task.md       # sub-agent runner
+    web_fetch.md           # privacy-aware web fetch
+    list_threads.md        # consolidation: enumerate threads with cursor state
+    read_thread_tail.md    # consolidation: read messages since cursor
+    advance_cursor.md      # consolidation: mark messages consolidated
+    find_orphans.md        # memory hygiene: unreachable non-root files
+    rename_memory.md       # memory hygiene: rename file + rewrite [[wiki-links]]
   skills/             # bundled skills (agentskills.io directory format)
     self-edit/
       SKILL.md
     git/
       SKILL.md
     coding/
+      SKILL.md
+    scheduling/
+      SKILL.md
+    consolidate-memories/
       SKILL.md
   cron/               # default cron jobs (markdown with frontmatter)
     heartbeat.md
@@ -445,6 +454,11 @@ agent/
       shell.ts
       delegate_task.ts
       web_fetch.ts
+      list_threads.ts
+      read_thread_tail.ts
+      advance_cursor.ts
+      find_orphans.ts
+      rename_memory.ts
       _paths.ts       # shared path-safety + self-edit-guard helper
     agents/           # sub-agent runner (single generic file, no per-agent definitions)
       runner.ts

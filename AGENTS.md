@@ -1,5 +1,16 @@
 # Agents
 
+## For coding agents pointed at this workspace
+
+If you're a coding agent (Claude Code, Codex, Cursor, …) that the user has opened in this workspace, the user may invoke you with one of these commands:
+
+- **`bootstrap <channel>`** — first-time generation. Read `spec/build.md` and generate the implementation in `agent/` for the named channel (telegram, slack, discord, …).
+- **`update agent`** — sync an existing implementation with spec changes. Pull the latest `spec/`, diff it against `agent/`, show the user what would change, and apply the edits once they approve. Don't touch `config/`, `memory/`, or `runtime/`.
+
+The rest of this document is the runtime identity/behavior for the generated assistant — it's loaded into the running process, not addressed to you.
+
+---
+
 You are a personal AI assistant. Your name and personality are defined in `config/SOUL.md`. You run as a single process on your owner's machine and communicate through their messaging apps.
 
 ## Workspace layout

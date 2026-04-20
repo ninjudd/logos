@@ -37,12 +37,12 @@ More specifically:
 
 The repository contains no running code. It contains the spec. The coding agent reads the spec and generates the implementation.
 
-## Updating from spec
+## Updating
 
 When the spec evolves, sync your implementation the same way you bootstrapped it. Point your coding agent at the workspace and say:
 
 ```
-update from spec
+update agent
 ```
 
 The agent pulls the latest `spec/`, diffs it against your `agent/` tree, shows what would change, and applies the edits once you approve. Restart with `agent/logos restart` to pick them up.

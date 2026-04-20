@@ -18,8 +18,6 @@ Read any file in the workspace by relative path. Returns the file's text content
 
 Plain string — the file's content as UTF-8 text.
 
-On error: throws. The AI SDK reports the throw to the model as a tool error.
-
 ## Behavior
 
 - **Reject path escapes.** Resolve to absolute, then check that the resolved path is inside the workspace root. Reject `..`, absolute paths outside the workspace, and paths that would escape via symlinks.

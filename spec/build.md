@@ -147,7 +147,7 @@ Implementation conventions:
 - **Paths helper** — share a single module (`agent/src/paths.ts`) used by every path-taking tool. The helper resolves to absolute, rejects paths escaping the workspace root, and enforces the `spec/` and `agent/` write guards (see `architecture.md` → Self-modification for what those guards are and when they apply).
 - **Memory graph cache invalidation** — any tool that writes under `memory/` (`write_file`, `edit_file`, `remember`, `add_memory`, `rename_memory`) must delete `runtime/memory-graph.json` so the next graph operation rebuilds.
 - **Resolution-preservation helper** — `add_memory` and `rename_memory` share the same pre/post snapshot → rewrite-changed-resolutions algorithm. Extract it as a single helper in `agent/src/memory.ts` and call it from both tools.
-- **Tool return shapes** follow `architecture.md` → Tool return shapes. Never return bare `null` from a tool.
+- **Tool return shapes** follow `architecture.md` → Tool return shapes. Never return bare `null` from a tool, and honor the call/result pairing invariant (error-catching adapter at registration).
 
 Custom tools are added by dropping `.ts` files directly into `agent/src/tools/` alongside the built-in ones. Loader scans that single directory.
 

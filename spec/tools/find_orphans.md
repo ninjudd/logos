@@ -27,7 +27,7 @@ No arguments.
 - Considers every `memory/*.md` file (top-level only) a **root**.
 - Walks outgoing `[[wiki-link]]` edges from each root, transitively, marking every reached file.
 - Any non-root file (i.e. under a subfolder) not marked is an orphan and goes in the output.
-- Treats `memory/journal/*.md` and `memory/new/*.md` as **excluded** — those are managed independently (journal is a scratch pad; inbox is a holding pen). They never appear in `orphans`.
+- Treats `memory/journal/**/*.md`, `memory/new/**/*.md`, and `memory/archive/**/*.md` as **excluded** — journal is a scratch pad, inbox is a holding pen, archive is cold storage. None of these need to be reachable from a root file; they never appear in `orphans`.
 - Uses the cached memory graph (`runtime/memory-graph.json`); rebuilds via mtime check if stale.
 
 ## Dependencies

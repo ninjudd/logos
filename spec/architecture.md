@@ -276,6 +276,7 @@ All plain files spread across the domains:
 - **`memory/`** — granular markdown files of long-term knowledge. See **Memory format** below.
 - **`memory/journal/`** — daily scratch pad files (e.g., `memory/journal/2026-03-09.md`). The agent jots notes throughout the day; the `dream` cron promotes important items into the rest of `memory/`.
 - **`memory/new/`** — inbox folder. The agent writes new notes here when there's no obvious folder yet (use `add_memory("new/{name}", content)`). The `dream` cron sorts the inbox into appropriate folders. Prefer confident placement (`add_memory` directly into the right folder) when you know where it belongs; use the inbox only when genuinely unsure.
+- **`memory/archive/`** — cold storage for content `dream` decided isn't currently useful but might be worth keeping. Exempt from the orphan check — things here don't need to be reachable from a root file. Use `rename_memory("{name}", "archive/{name}")` to move something into the archive.
 - **`runtime/`** — `threads/`, `logs/`, `*.pid`, `memory-graph.json` (backlink cache), and per-thread consolidation cursors (sidecar `*.cursor` files next to each `*.jsonl`; see **Memory consolidation** below).
 
 ## Memory format
@@ -486,6 +487,7 @@ memory/
   journal/
     2026-03-10.md
   new/                # inbox — agent writes here when no obvious folder yet
+  archive/            # cold storage — exempt from the orphan check
 
 # Ephemeral — gitignored, never a repo
 runtime/

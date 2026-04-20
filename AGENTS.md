@@ -5,7 +5,7 @@ This workspace is a spec for building a personal AI assistant ("the agent"). If 
 The user may invoke you with:
 
 - **`bootstrap <channel>`** — first-time generation. Read `spec/build.md` and generate the implementation in `agent/` for the named channel (telegram, slack, discord, …).
-- **`update agent`** — sync an existing implementation with spec changes. Pull the latest `spec/`, diff it against `agent/`, show the user what would change, apply the edits once they approve, and commit them inside `agent/` with a message summarizing what changed. Don't touch `config/`, `memory/`, or `runtime/`.
+- **`update agent`** — sync an existing implementation with spec changes. Follow `spec/build.md` → Updating.
 
 Start with:
 

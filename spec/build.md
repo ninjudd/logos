@@ -120,7 +120,7 @@ The system prompt is concatenated from these sections, in order:
 2. **`config/SOUL.md`** (identity) — if missing, run the first-run flow (see step 4a).
 3. **Memory manifest** — see `architecture.md` → Memory format → Loading into context. Build it from the memory module's manifest output (step 4b).
 4. **Last 24 hours of `memory/journal/` entries inline** — recent agent-authored notes likely to be relevant; older journal entries appear in the manifest only.
-5. **Skills summary** — names and descriptions from `spec/skills/*/SKILL.md` and `config/skills/*/SKILL.md` frontmatter; config wins on name collision. Skills loader described in step 4b.
+5. **Skills summary** — pulled from `spec/skills/*/SKILL.md` and `config/skills/*/SKILL.md` frontmatter; config wins on name collision. Each entry is formatted as `- <name> (<path to SKILL.md>) — <description>` so the agent can open the full skill body via `read_file` with the exact path. Skills loader described in step 4b.
 
 #### 4a. First-run flow
 

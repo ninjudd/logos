@@ -477,6 +477,8 @@ spec/
       SKILL.md
     consolidate-memories/
       SKILL.md
+    memory/
+      SKILL.md
   cron/               # default cron jobs (markdown with frontmatter)
     heartbeat.md
     nap.md

@@ -188,6 +188,7 @@ Sub-agents are not pre-defined as separate entities. There is no `spec/agents/` 
 **Constraints:**
 
 - Sub-agents cannot spawn sub-agents. The runner strips `delegate_task` from the tool allowlist regardless of what the caller asks for. Single-level delegation, period.
+- **Cost info is NOT surfaced to the calling agent.** Token usage and wall-clock duration can be recorded in the sub-agent's log (for operator visibility) but never appear in the `delegate_task` return value. Rationale: the calling agent should decide whether to delegate based on the task, not on running-total cost.
 
 **Sub-agent logs.** Every `delegate_task` invocation writes its full event stream (same [event schema](#event-schema) as threads and cron logs) to a log file **nested under the caller's log**:
 
@@ -230,7 +231,12 @@ To disable a spec default, drop a config file with the same name and `enabled: f
 
 There is no central registry. Adding a job means dropping a file. The merged view (with source annotations) is available via `agent/logos cron`.
 
-When a job fires, the scheduler looks up the primary channel and sends the merged prompt to the agent through the router as a synthetic message addressed to the owner's main conversation. A reminder is appended: "If you have nothing to say to the owner, respond with NO_REPLY." For `history: none` jobs the router skips the history fetch and runs the agent with just the synthetic prompt.
+When a job fires, the scheduler looks up the primary channel and sends the merged prompt to the agent through the router as a synthetic message addressed to the owner's main conversation. A reminder is appended: "If you have nothing to say to the owner, respond with NO_REPLY."
+
+**Router rules for cron dispatch.** When the scheduler dispatches a cron job, it passes the `history` mode alongside the synthetic prompt. The router's behavior:
+
+- For `history: primary`: identical to a normal user message dispatch. The synthetic prompt is appended to the user thread as a user event; the agent's full event stream (text, tool calls, tool results) is appended to the user thread as it's produced. The cron log receives the same events plus the `cron_start` / `cron_end` framing.
+- For `history: none`: the router reads no prior history (passes `[]` to the agent). It suppresses all intermediate writes to the user thread. Only the final assistant text is appended to the user thread (skipped entirely on `NO_REPLY`). The cron log receives the full event stream plus the `cron_start` / `cron_end` framing.
 
 **Where the events land** (see [Storage → Message history](#message-history-runtimethreads) for the event schema):
 
@@ -280,13 +286,15 @@ type Event =
   | { role: "user", text: string, turn_id: string, timestamp: string }
   | { role: "assistant", text: string, tool_calls?: ToolCall[], turn_id: string, timestamp: string }
   | { role: "tool", tool_call_id: string, result: unknown, turn_id: string, timestamp: string }
-  | { role: "system", type: "cron_start", job: string, schedule: string, turn_id: string, timestamp: string }
-  | { role: "system", type: "cron_end", reply: string, duration_ms: number, turn_id: string, timestamp: string }
+  | { role: "audit", type: "cron_start", job: string, schedule: string, turn_id: string, timestamp: string }
+  | { role: "audit", type: "cron_end", reply: string, duration_ms: number, turn_id: string, timestamp: string }
 
 type ToolCall = { id: string, tool: string, args: unknown }
 ```
 
-Snake_case throughout the wire format. Tool calls are bundled with the assistant message they were part of (mirroring AI SDK and Anthropic API conventions). Tool results are separate events with `role: "tool"`. The optional `sub_agent_log` field on a tool result points to a nested log file; see [Sub-agents](#sub-agents).
+Snake_case throughout the wire format. Tool calls are bundled with the assistant message they were part of via a flat `tool_calls` field (mirroring AI SDK and Anthropic API conventions). Tool results are separate events with `role: "tool"`. The optional `sub_agent_log` field on a tool result points to a nested log file; see [Sub-agents](#sub-agents).
+
+`role: "audit"` is distinct from AI SDK's `role: "system"` — LLM-oriented roles (`user`, `assistant`, `tool`) feed the context reconstruction; `audit` events exist only for human/operator record-keeping and are skipped by `buildLlmMessages`. `assistant.text` may be an empty string when a step produced only tool calls; the render filter skips such events when searching for the last assistant text of a turn.
 
 #### `turn_id`
 
@@ -307,7 +315,7 @@ When the agent runs, the router reads the JSONL and reconstructs a `CoreMessage[
 
 ### Cron logs (`runtime/logs/cron/`)
 
-One JSONL file per cron run, at `runtime/logs/cron/{jobname}/{ISO-timestamp}.jsonl`. Uses the [same event schema](#event-schema) as threads, with `cron_start` and `cron_end` system events bracketing the run. For `history: none` jobs (dream, nap) the cron log is the primary audit trail; for `history: primary` jobs (heartbeat) the cron log is an additional record — the same agent/tool events also land in the user's thread. See [Scheduler](#4-scheduler) for which events go where.
+One JSONL file per cron run, at `runtime/logs/cron/{jobname}/{ISO-timestamp}.jsonl`. Uses the [same event schema](#event-schema) as threads, with `cron_start` and `cron_end` audit events bracketing the run. For `history: none` jobs (dream, nap) the cron log is the primary audit trail; for `history: primary` jobs (heartbeat) the cron log is an additional record — the same agent/tool events also land in the user's thread. See [Scheduler](#4-scheduler) for which events go where.
 
 No retention policy — kept forever. Small text, useful for the agent to reflect on past runs via `read_file`.
 

@@ -59,8 +59,8 @@ The JSONL stores the full agent event stream (user messages, assistant steps wit
 
 - `user` events → emitted as-is.
 - `assistant` events → only the **last** assistant text per `turn_id` is emitted (intermediate "Let me check…" texts from multi-step turns are skipped).
-- `tool_call` parts inside assistant events, and `role: "tool"` events → **not emitted** to the client in the default view.
-- `system` events (`cron_start`, `cron_end`) → **not emitted** to the client.
+- An assistant event's `tool_calls` field, and `role: "tool"` events → **not emitted** to the client in the default view.
+- `audit` events (`cron_start`, `cron_end`) → **not emitted** to the client.
 
 The `index` carried on each emitted event is the JSONL line index of the last event in that turn — so the client's cursor still points at a valid position for resuming later.
 

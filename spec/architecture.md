@@ -129,11 +129,15 @@ The kernel ships eight tools:
 - `read_file(path)` — read any file in the workspace
 - `write_file(path, content, mode)` — `create` (fail if exists), `append`, or `replace` (overwrite)
 - `edit_file(path, old_string, new_string)` — surgical find-and-replace; `old_string` must appear exactly once
-- `find_memory(name)` — resolve a wiki-link-style name to a path. Returns `{ found: true, path, backlinks }` or `{ found: false }` (see [Tool return shapes](#tool-return-shapes)). Does NOT lazy-create.
+- `find_memory(name)` — resolve a wiki-link-style name to every matching file, sorted shortest-path first (see [Tool return shapes](#tool-return-shapes))
+- `add_memory(name, content)` — create a new memory file and preserve any `[[wiki-link]]` resolutions the new file would otherwise shadow
+- `rename_memory(oldName, newName)` — move/rename a memory file and rewrite `[[wiki-links]]` so every reference resolves to the same file it did before
 - `remember(text)` — sugar for appending to today's journal
 - `shell(cmd)` — run a shell command (1 MB output limit)
 - `delegate_task({ prompt, skills, tools, model? })` — spawn a sub-agent in an isolated context (see [Sub-agents](#sub-agents))
 - `web_fetch(url)` — fetch a URL and return content as markdown (see `spec/tools/web_fetch.md` for backend choice and privacy)
+
+Memory-aware tools (`find_memory`, `add_memory`, `rename_memory`) take names in **wiki-link form** — no `memory/` prefix, no `.md` extension. They return full workspace paths (e.g. `memory/preferences/coffee.md`) in their output for interop with `read_file`.
 
 Users can add their own tools directly in `agent/src/tools/` — same location as the built-in tools. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
 
@@ -142,17 +146,15 @@ Users can add their own tools directly in `agent/src/tools/` — same location a
 Tool return values get JSON-serialized and shown to the model. Two conventions:
 
 - **Tools that succeed-or-throw** (`read_file`, `write_file`, `edit_file`, `remember`, `shell`) return their result on success and throw on failure. The AI SDK reports the throw to the model as an error.
-- **Tools that succeed-or-miss** (anything that does lookup, including `find_memory`) return a **discriminated union** with a boolean tag — never a bare `null`. The tag makes the shape unambiguous to the model and leaves room to add diagnostic fields later (e.g., suggestions for fuzzy matches).
+- **Tools that succeed-or-miss** (anything that does lookup) return a **discriminated shape** — a list (empty = miss) or a union with a boolean tag — never a bare `null`. Makes the shape unambiguous to the model and leaves room for diagnostic fields later.
 
 `find_memory` specifically:
 
 ```ts
-type FindMemoryResult =
-  | { found: true; path: string; backlinks: string[] }
-  | { found: false };
+type FindMemoryResult = { matches: Array<{ path: string; backlinks: string[] }> };
 ```
 
-Do not return `null`, `undefined`, or `{ path: null }`. The shape above is the contract.
+Sorted shortest-path first. Empty list means no match. Do not return `null`, `undefined`, or `{ matches: null }`. The shape above is the contract.
 
 **Skills** are markdown instruction files that teach the agent how to accomplish complex tasks using its tools. Bundled skills live in `spec/skills/`, instance-specific skills in `config/skills/`. Both directories are scanned at startup; on name collision, `config/` wins.
 
@@ -273,7 +275,7 @@ All plain files spread across the domains:
 - **Custom channels and tools** live in `agent/src/channels/` and `agent/src/tools/` alongside the built-in ones — `config/` holds no code.
 - **`memory/`** — granular markdown files of long-term knowledge. See **Memory format** below.
 - **`memory/journal/`** — daily scratch pad files (e.g., `memory/journal/2026-03-09.md`). The agent jots notes throughout the day; the `dream` cron promotes important items into the rest of `memory/`.
-- **`memory/new/`** — inbox folder. The agent writes new notes here when there's no obvious folder yet (use `write_file` with `mode: "create"`). The `dream` cron sorts the inbox into appropriate folders.
+- **`memory/new/`** — inbox folder. The agent writes new notes here when there's no obvious folder yet (use `add_memory("new/{name}", content)`). The `dream` cron sorts the inbox into appropriate folders. Prefer confident placement (`add_memory` directly into the right folder) when you know where it belongs; use the inbox only when genuinely unsure.
 - **`runtime/`** — `threads/`, `logs/`, `*.pid`, `memory-graph.json` (backlink cache), and per-thread consolidation cursors (sidecar `*.cursor` files next to each `*.jsonl`; see **Memory consolidation** below).
 
 ## Memory format
@@ -314,7 +316,9 @@ Forward links use the wiki-link syntax:
 1. Find all files in `memory/` whose filename (without `.md`) equals the link target, or whose `aliases:` list contains it
 2. If exactly one match: that's the link target
 3. If multiple matches: pick the **shortest path**, then alphabetical
-4. If no match: return null (no auto-creation). The agent decides whether to create a file via `write_file` and where to put it. This matches Obsidian's spirit — Obsidian only creates a target file when the user *clicks* a missing link, not when one is parsed.
+4. If no match: return no target (no auto-creation). The agent decides whether to create a file via `add_memory` and where to put it. This matches Obsidian's spirit — Obsidian only creates a target file when the user *clicks* a missing link, not when one is parsed.
+
+**Resolution preservation on changes.** When a file is created, renamed, or moved, bare-name links (`[[coffee]]`) can silently change which file they resolve to — another file with the same basename might now win the shortest-path tiebreak, or the shadowed file might get un-shadowed. The `add_memory` and `rename_memory` tools handle this by snapshotting the full resolution map before the change and rewriting any reference whose resolved target would change after the change. Raw `write_file(mode: "create")` under `memory/` does NOT run this preservation step — prefer `add_memory` for any memory-file creation that could introduce name shadowing.
 
 ### Backlinks
 
@@ -401,6 +405,8 @@ spec/
     write_file.md
     edit_file.md
     find_memory.md
+    add_memory.md          # memory-aware create + resolution preservation
+    rename_memory.md       # memory-aware rename + resolution preservation
     remember.md
     shell.md
     delegate_task.md       # sub-agent runner
@@ -409,7 +415,6 @@ spec/
     read_thread_tail.md    # consolidation: read messages since cursor
     advance_cursor.md      # consolidation: mark messages consolidated
     find_orphans.md        # memory hygiene: unreachable non-root files
-    rename_memory.md       # memory hygiene: rename file + rewrite [[wiki-links]]
   skills/             # bundled skills (agentskills.io directory format)
     self-edit/
       SKILL.md
@@ -450,6 +455,8 @@ agent/
       write_file.ts
       edit_file.ts
       find_memory.ts
+      add_memory.ts
+      rename_memory.ts
       remember.ts
       shell.ts
       delegate_task.ts
@@ -458,7 +465,6 @@ agent/
       read_thread_tail.ts
       advance_cursor.ts
       find_orphans.ts
-      rename_memory.ts
       _paths.ts       # shared path-safety + self-edit-guard helper
     agents/           # sub-agent runner (single generic file, no per-agent definitions)
       runner.ts

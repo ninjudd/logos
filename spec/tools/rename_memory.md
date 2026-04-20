@@ -1,38 +1,49 @@
 # rename_memory
 
-Move a memory file to a new path and rewrite every `[[wiki-link]]` that points to it.
+Move a memory file and rewrite `[[wiki-links]]` to preserve every existing reference's target.
 
 ## Description (shown to the model)
 
-Rename or move a memory file safely — moves the file AND updates every `[[wiki-link]]` in other memory files that targeted the old name, so links don't break. Use this when promoting/demoting between root and subfolders or reorganizing the graph.
+Rename or move a memory note. Takes wiki-link-style names for both old and new (no `memory/` prefix, no `.md` extension — same form as `find_memory` and `add_memory`). After the move, every `[[...]]` reference is rewritten as needed so it resolves to the same file it did before the rename. Fails if the new target already exists.
 
 ## Input
 
 ```ts
-{ oldPath: string, newPath: string }
+{ oldName: string, newName: string }
 ```
 
-Both paths are workspace-relative (e.g. `memory/preferences/coffee.md`). Both must be under `memory/`.
+- `oldName` — wiki-link-style identifier for the existing file (e.g. `"drinks/coffee"`).
+- `newName` — wiki-link-style identifier for the destination (e.g. `"coffee"` for a root-level move, or `"preferences/coffee"` for a new subfolder).
 
 ## Output
 
 ```ts
-{ ok: true, updatedFiles: string[], updatedLinks: number }
+{ ok: true, oldPath: string, newPath: string, updatedFiles: string[], updatedLinks: number }
 ```
 
-- `updatedFiles` is the list of memory files whose contents were modified to fix wiki-links.
-- `updatedLinks` is the total number of `[[...]]` occurrences rewritten.
+- `oldPath` / `newPath` — workspace-relative paths (e.g. `"memory/drinks/coffee.md"` → `"memory/coffee.md"`).
+- `updatedFiles` — memory files whose contents were modified to preserve link resolutions.
+- `updatedLinks` — total number of `[[...]]` occurrences rewritten.
 
 Always returns the discriminated shape — never `null`.
 
 ## Behavior
 
-1. Refuse if `oldPath` doesn't exist or `newPath` already exists.
-2. Refuse if either path is outside `memory/`.
-3. Compute the old name (filename without `.md`) and the new name.
-4. Move the file with `fs.rename`. If `newPath`'s parent directory doesn't exist, create it.
-5. Scan every `memory/**/*.md` for `[[oldName]]` and `[[oldName|...]]` references. Rewrite to `[[newName]]` / `[[newName|...]]`. Preserve the display-text portion. Also handle path-qualified links: `[[oldFolder/oldName]]` → `[[newFolder/newName]]` when both folder and name change.
-6. Invalidate the memory graph cache so the next graph operation rebuilds.
+1. Resolve `oldName` to `memory/{oldName}.md` and `newName` to `memory/{newName}.md`. Refuse if either path escapes `memory/`.
+2. Refuse if `oldName` doesn't exist or `newName` already exists.
+3. **Pre-rename snapshot.** Build a resolution map: for every `[[...]]` reference in memory files, record its resolved target file.
+4. Move the file with `fs.rename` (creating `newName`'s parent directory if missing).
+5. **Post-rename snapshot.** Rebuild the resolution map.
+6. For every reference whose resolved target changed, rewrite it to the minimal form that restores its original target. Two sub-cases:
+   - References whose original target was the renamed file → rewrite to `[[newName]]` (or path-qualified if `newName` would be ambiguous).
+   - References whose original target was an **unrelated** file that got shadowed by the rename → rewrite to a path-qualified form of the unrelated file's location.
+7. Invalidate the memory graph cache.
+
+The snapshot-and-rewrite step shares a helper with `add_memory`.
+
+### Example
+
+Given `memory/drinks/coffee.md` and `memory/table/coffee.md`, an existing `[[coffee]]` reference resolves to `drinks/coffee` (alphabetical tiebreak on shortest-path). Renaming `table/coffee` → `coffee` (to root) moves the table entry to the root; a bare `[[coffee]]` would now resolve to the root file (shortest path wins). To preserve the original target, `[[coffee]]` is rewritten to `[[drinks/coffee]]`.
 
 ## Dependencies
 
@@ -40,6 +51,6 @@ Internal `agent/src/memory.ts` module.
 
 ## Implementation notes
 
-- Use the existing wiki-link parser; don't hand-roll a regex that matches across embeds (`![[...]]`) and aliases (`[[name|display]]`) inconsistently. The same parser the graph builder uses should be reused.
-- Atomic at the file-move level only. If link rewriting fails partway through, the file has already been moved — log clearly which files were updated before the failure so the agent can finish manually.
-- Renaming a file that's referenced by `aliases:` frontmatter in other files is NOT handled; aliases are about names, not paths, and aren't affected by file moves.
+- Reuse the wiki-link parser the graph builder uses.
+- Atomic at the file-move level only. If link rewriting fails partway through, the file has already been moved; log which files were updated before the failure so the agent can finish manually.
+- `aliases:` frontmatter entries on other files are about names, not paths, and aren't affected by the move.

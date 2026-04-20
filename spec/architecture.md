@@ -129,11 +129,15 @@ The kernel ships eight tools:
 - `read_file(path)` — read any file in the workspace
 - `write_file(path, content, mode)` — `create` (fail if exists), `append`, or `replace` (overwrite)
 - `edit_file(path, old_string, new_string)` — surgical find-and-replace; `old_string` must appear exactly once
-- `find_memory(name)` — resolve a wiki-link-style name to a path. Returns `{ found: true, path, backlinks }` or `{ found: false }` (see [Tool return shapes](#tool-return-shapes)). Does NOT lazy-create.
+- `find_memory(name)` — resolve a wiki-link-style name to every matching file, sorted shortest-path first (see [Tool return shapes](#tool-return-shapes))
+- `add_memory(name, content)` — create a new memory file and preserve any `[[wiki-link]]` resolutions the new file would otherwise shadow
+- `rename_memory(oldName, newName)` — move/rename a memory file and rewrite `[[wiki-links]]` so every reference resolves to the same file it did before
 - `remember(text)` — sugar for appending to today's journal
 - `shell(cmd)` — run a shell command (1 MB output limit)
 - `delegate_task({ prompt, skills, tools, model? })` — spawn a sub-agent in an isolated context (see [Sub-agents](#sub-agents))
 - `web_fetch(url)` — fetch a URL and return content as markdown (see `spec/tools/web_fetch.md` for backend choice and privacy)
+
+Memory-aware tools (`find_memory`, `add_memory`, `rename_memory`) take names in **wiki-link form** — no `memory/` prefix, no `.md` extension. They return full workspace paths (e.g. `memory/preferences/coffee.md`) in their output for interop with `read_file`.
 
 Users can add their own tools directly in `agent/src/tools/` — same location as the built-in tools. The AI SDK handles tool execution loops natively — limit the number of steps to prevent runaway tool use.
 
@@ -142,23 +146,21 @@ Users can add their own tools directly in `agent/src/tools/` — same location a
 Tool return values get JSON-serialized and shown to the model. Two conventions:
 
 - **Tools that succeed-or-throw** (`read_file`, `write_file`, `edit_file`, `remember`, `shell`) return their result on success and throw on failure. The AI SDK reports the throw to the model as an error.
-- **Tools that succeed-or-miss** (anything that does lookup, including `find_memory`) return a **discriminated union** with a boolean tag — never a bare `null`. The tag makes the shape unambiguous to the model and leaves room to add diagnostic fields later (e.g., suggestions for fuzzy matches).
+- **Tools that succeed-or-miss** (anything that does lookup) return a **discriminated shape** — a list (empty = miss) or a union with a boolean tag — never a bare `null`. Makes the shape unambiguous to the model and leaves room for diagnostic fields later.
 
 `find_memory` specifically:
 
 ```ts
-type FindMemoryResult =
-  | { found: true; path: string; backlinks: string[] }
-  | { found: false };
+type FindMemoryResult = { matches: Array<{ path: string; backlinks: string[] }> };
 ```
 
-Do not return `null`, `undefined`, or `{ path: null }`. The shape above is the contract.
+Sorted shortest-path first. Empty list means no match. Do not return `null`, `undefined`, or `{ matches: null }`. The shape above is the contract.
 
 **Skills** are markdown instruction files that teach the agent how to accomplish complex tasks using its tools. Bundled skills live in `spec/skills/`, instance-specific skills in `config/skills/`. Both directories are scanned at startup; on name collision, `config/` wins.
 
 **Identity** comes from `config/SOUL.md`, written on first run. The agent reads it on every invocation.
 
-**Long-term memory** comes from the `memory/` directory. The system prompt includes a manifest (name + summary) for every memory file; full content is fetched on demand via `find_memory` and `read_file`. See **Memory format** below.
+**Long-term memory** comes from the `memory/` directory. The system prompt includes a manifest of **root-level files only** (name + summary); subfolder files are reached by following `[[wiki-links]]` from a root file. Full content is fetched on demand via `find_memory` and `read_file`. See **Memory format** below.
 
 **Self-awareness.** The agent learns about its scheduled-job invocation mode via the bundled `scheduling` skill (`spec/skills/scheduling/SKILL.md`), whose name and description appear in the skills summary at startup. Without this, the agent doesn't know cron exists and may tell the user it can't reach out proactively — which is wrong; cron firings are exactly the proactive-outreach mechanism.
 
@@ -197,10 +199,19 @@ The scheduler runs cron jobs from two roots: `spec/cron/` (defaults shipped with
 ```markdown
 ---
 schedule: "*/30 * * * *"
+history: primary  # or: none
 ---
 
 Check for unread messages that need follow-up. NO_REPLY if nothing to report.
 ```
+
+Frontmatter fields:
+
+- **`schedule:`** — cron expression. Required to fire.
+- **`enabled:`** — defaults to `true`. Set to `false` to disable.
+- **`history:`** — what conversation context the agent sees when the job fires. Defaults to `primary`.
+  - `primary` — the agent runs with the last 50 messages of the primary channel's owner conversation as context. Use for outreach-style jobs that may want to reference recent activity (e.g. heartbeat).
+  - `none` — the agent runs with no thread history; only the cron body is in context. Use for internal/background jobs that don't depend on a conversation (e.g. consolidation jobs that delegate to a sub-agent and write to memory).
 
 **Layering.** When a file with the same name appears in both roots, the merged job uses:
 
@@ -211,7 +222,7 @@ To disable a spec default, drop a config file with the same name and `enabled: f
 
 There is no central registry. Adding a job means dropping a file. The merged view (with source annotations) is available via `agent/logos cron`.
 
-When a job fires, the scheduler looks up the primary channel and sends the merged prompt to the agent through the router as a synthetic message addressed to the owner's main conversation. A reminder is appended: "If you have nothing to say to the owner, respond with NO_REPLY."
+When a job fires, the scheduler looks up the primary channel and sends the merged prompt to the agent through the router as a synthetic message addressed to the owner's main conversation. A reminder is appended: "If you have nothing to say to the owner, respond with NO_REPLY." For `history: none` jobs the router skips the history fetch and runs the agent with just the synthetic prompt.
 
 ### 5. Self-modification
 
@@ -263,9 +274,10 @@ All plain files spread across the domains:
 - **`config/skills/`** — instance-specific skills (markdown, agentskills.io directory format).
 - **Custom channels and tools** live in `agent/src/channels/` and `agent/src/tools/` alongside the built-in ones — `config/` holds no code.
 - **`memory/`** — granular markdown files of long-term knowledge. See **Memory format** below.
-- **`memory/journal/`** — daily scratch pad files (e.g., `memory/journal/2026-03-09.md`). The agent jots notes throughout the day; the consolidate-memories job promotes important items into the rest of `memory/`.
-- **`memory/new/`** — inbox folder. The agent writes new notes here when there's no obvious folder yet (use `write_file` with `mode: "create"`). The consolidate-memories job sorts the inbox into appropriate folders.
-- **`runtime/`** — `threads/`, `logs/`, `*.pid`, `memory-graph.json` (backlink cache).
+- **`memory/journal/`** — daily scratch pad files (e.g., `memory/journal/2026-03-09.md`). The agent jots notes throughout the day; the `dream` cron promotes important items into the rest of `memory/`.
+- **`memory/new/`** — inbox folder. The agent writes new notes here when there's no obvious folder yet (use `add_memory("new/{name}", content)`). The `dream` cron sorts the inbox into appropriate folders. Prefer confident placement (`add_memory` directly into the right folder) when you know where it belongs; use the inbox only when genuinely unsure.
+- **`memory/archive/`** — cold storage for content `dream` decided isn't currently useful but might be worth keeping. Exempt from the orphan check — things here don't need to be reachable from a root file. Use `rename_memory("{name}", "archive/{name}")` to move something into the archive.
+- **`runtime/`** — `threads/`, `logs/`, `*.pid`, `memory-graph.json` (backlink cache), and per-thread consolidation cursors (sidecar `*.cursor` files next to each `*.jsonl`; see **Memory consolidation** below).
 
 ## Memory format
 
@@ -305,7 +317,9 @@ Forward links use the wiki-link syntax:
 1. Find all files in `memory/` whose filename (without `.md`) equals the link target, or whose `aliases:` list contains it
 2. If exactly one match: that's the link target
 3. If multiple matches: pick the **shortest path**, then alphabetical
-4. If no match: return null (no auto-creation). The agent decides whether to create a file via `write_file` and where to put it. This matches Obsidian's spirit — Obsidian only creates a target file when the user *clicks* a missing link, not when one is parsed.
+4. If no match: return no target (no auto-creation). The agent decides whether to create a file via `add_memory` and where to put it. This matches Obsidian's spirit — Obsidian only creates a target file when the user *clicks* a missing link, not when one is parsed.
+
+**Resolution preservation on changes.** When a file is created, renamed, or moved, bare-name links (`[[coffee]]`) can silently change which file they resolve to — another file with the same basename might now win the shortest-path tiebreak, or the shadowed file might get un-shadowed. The `add_memory` and `rename_memory` tools handle this by snapshotting the full resolution map before the change and rewriting any reference whose resolved target would change after the change. Raw `write_file(mode: "create")` under `memory/` does NOT run this preservation step — prefer `add_memory` for any memory-file creation that could introduce name shadowing.
 
 ### Backlinks
 
@@ -315,19 +329,38 @@ The `find_memory` tool returns a file's path and its backlinks ("files that refe
 
 ### Loading into context
 
-Memory is **not loaded eagerly** into the system prompt. Instead, the system prompt includes a **manifest**: a flat list of every memory file with its name, aliases, tags, and a one-line summary. The summary comes from (in order of preference):
+Memory is **not loaded eagerly** into the system prompt. Instead, the system prompt includes a **manifest of root-level files only** — every `memory/*.md` file (not recursing into subfolders), with its name, aliases, tags, and a one-line summary. The summary comes from (in order of preference):
 
 1. The frontmatter `description:` field, if present
 2. The first H1 heading in the body
 3. The first ~100 characters of body text
 
-The manifest gives the agent enough context to know what's available. The agent uses `find_memory` and `read_file` to fetch full content on demand, based on conversation context.
+The manifest gives the agent enough context to know what high-level topics exist. The agent uses `find_memory` and `read_file` to fetch full content on demand, based on conversation context.
 
-**Journal exception:** the last 24 hours of `memory/journal/` entries are included in the system prompt directly, since they're recent agent-authored notes likely to be relevant. Older journal entries appear in the manifest but not inline.
+**Root-level files act as entry points.** Memory is organized so that anything important is reachable from a root file via `[[wiki-links]]` (transitively). Subfolder files exist for organization but are never surfaced in the manifest — the agent finds them by following links from root files. This is the standard "Map of Content" pattern: root files are the front page; deep files live in folders but are linked from above.
+
+The reachability invariant — every non-root file is transitively linked from at least one root file — is maintained by the `dream` cron job, which runs an orphan check during its daily sweep and either links orphans in or archives them.
+
+**Journal exception:** the last 24 hours of `memory/journal/` entries are included in the system prompt directly, since they're recent agent-authored notes likely to be relevant. Journal entries are NOT in the root manifest (they're in the `journal/` subfolder); older entries are reachable only by date.
 
 ### Obsidian compatibility
 
 If `memory/` is opened as an Obsidian vault, Obsidian creates a `.obsidian/` directory for vault settings (workspace layout, plugin config). This directory is machine-local and should be in `memory/.gitignore`. Configure Obsidian's "Default location for new notes" → `new/` so notes you create in Obsidian land in the same inbox the agent uses.
+
+## Memory consolidation
+
+Conversation threads are append-only and grow forever. To keep the agent's working knowledge useful as threads grow, two scheduled jobs distill thread content into long-term memory.
+
+**Two-tier consolidation:**
+
+- **`nap`** (hourly, `history: none`) — quick per-thread pass. Walks `runtime/threads/`; for any thread whose unconsolidated message count exceeds a threshold, reads the unconsolidated tail, writes summaries to memory, and advances the cursor. Scoped to one thread at a time. Doesn't touch journal or inbox.
+- **`dream`** (daily, `history: none`) — deep full sweep. Reads all threads (allowing cross-thread correlations), the day's journal, and the `memory/new/` inbox. Updates memory files, runs the orphan check (every non-root file reachable from a root file via `[[wiki-links]]`), promotes hot content to root level, archives or deletes cold content. Posts a brief summary to the user.
+
+Both jobs run with `history: none`: the agent's context for the invocation starts clean (no prior conversation history is loaded), so the consolidation work doesn't need to be isolated in a sub-agent — the cron invocation itself is already an isolated context. Only the final summary reply lands in the user's thread.
+
+**Consolidation cursors.** A per-thread cursor records how many messages have been consolidated into memory. Stored as a sidecar file next to the thread JSONL: `runtime/threads/{channelId}/{conversationId}.cursor` containing a single integer (the count of consolidated messages from the start of the file). Both `nap` and `dream` read and update these cursors so neither re-consolidates content the other has already processed. Cursors share the runtime lifecycle with the threads — wipe `runtime/` and there's nothing to consolidate either.
+
+**Thread context at runtime is unchanged.** The agent always sees the most recent N messages of the active thread (capped at the token budget). Consolidated older content reaches the agent through the memory manifest, not through any thread-content rewriting. The thread is "what's happening now"; memory is "what I know."
 
 ## First-run flow
 
@@ -373,10 +406,16 @@ spec/
     write_file.md
     edit_file.md
     find_memory.md
+    add_memory.md          # memory-aware create + resolution preservation
+    rename_memory.md       # memory-aware rename + resolution preservation
     remember.md
     shell.md
-    delegate_task.md  # sub-agent runner
-    web_fetch.md      # privacy-aware web fetch
+    delegate_task.md       # sub-agent runner
+    web_fetch.md           # privacy-aware web fetch
+    list_threads.md        # consolidation: enumerate threads with cursor state
+    read_thread_tail.md    # consolidation: read messages since cursor
+    advance_thread_cursor.md  # consolidation: mark messages consolidated
+    find_orphans.md        # memory hygiene: unreachable non-root files
   skills/             # bundled skills (agentskills.io directory format)
     self-edit/
       SKILL.md
@@ -384,9 +423,14 @@ spec/
       SKILL.md
     coding/
       SKILL.md
+    scheduling/
+      SKILL.md
+    consolidate-memories/
+      SKILL.md
   cron/               # default cron jobs (markdown with frontmatter)
     heartbeat.md
-    consolidate-memories.md
+    nap.md
+    dream.md
 
 # Generated implementation — gitignored, optionally a separate repo
 agent/
@@ -412,10 +456,16 @@ agent/
       write_file.ts
       edit_file.ts
       find_memory.ts
+      add_memory.ts
+      rename_memory.ts
       remember.ts
       shell.ts
       delegate_task.ts
       web_fetch.ts
+      list_threads.ts
+      read_thread_tail.ts
+      advance_thread_cursor.ts
+      find_orphans.ts
       _paths.ts       # shared path-safety + self-edit-guard helper
     agents/           # sub-agent runner (single generic file, no per-agent definitions)
       runner.ts
@@ -437,6 +487,7 @@ memory/
   journal/
     2026-03-10.md
   new/                # inbox — agent writes here when no obvious folder yet
+  archive/            # cold storage — exempt from the orphan check
 
 # Ephemeral — gitignored, never a repo
 runtime/

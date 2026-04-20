@@ -131,7 +131,7 @@ Bundled tools to build (each has a recipe):
 - Core file/shell: `read_file`, `write_file`, `edit_file`, `remember`, `shell`
 - Memory-aware create/find/rename (wiki-link-form input, resolution-preserving): `find_memory`, `add_memory`, `rename_memory`
 - Agent control: `delegate_task`, `web_fetch`
-- Consolidation (used by `nap`/`dream` crons): `list_threads`, `read_thread_tail`, `advance_cursor`
+- Consolidation (used by `nap`/`dream` crons): `list_threads`, `read_thread_tail`, `advance_thread_cursor`
 - Memory hygiene: `find_orphans`
 
 Implementation conventions:

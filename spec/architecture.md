@@ -413,7 +413,7 @@ spec/
     web_fetch.md           # privacy-aware web fetch
     list_threads.md        # consolidation: enumerate threads with cursor state
     read_thread_tail.md    # consolidation: read messages since cursor
-    advance_cursor.md      # consolidation: mark messages consolidated
+    advance_thread_cursor.md  # consolidation: mark messages consolidated
     find_orphans.md        # memory hygiene: unreachable non-root files
   skills/             # bundled skills (agentskills.io directory format)
     self-edit/
@@ -463,7 +463,7 @@ agent/
       web_fetch.ts
       list_threads.ts
       read_thread_tail.ts
-      advance_cursor.ts
+      advance_thread_cursor.ts
       find_orphans.ts
       _paths.ts       # shared path-safety + self-edit-guard helper
     agents/           # sub-agent runner (single generic file, no per-agent definitions)

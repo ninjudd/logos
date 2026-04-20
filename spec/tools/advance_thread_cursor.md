@@ -1,4 +1,4 @@
-# advance_cursor
+# advance_thread_cursor
 
 Mark messages as consolidated by writing the consolidation cursor.
 

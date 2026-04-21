@@ -247,7 +247,7 @@ That's it. No HTTP server needed unless a channel requires a webhook.
 Create a bash script at `agent/protos` that supports:
 
 - `agent/protos` (no args) — print a usage message listing the subcommands and exit.
-- `agent/protos start` — start the process in the background
+- `agent/protos start` — start the process in the background. Before launching, validate that required env vars are set in `config/.env` (at minimum the AI provider API key and `AI_MODEL`). If any are missing or empty, print a clear error naming the variable and `config/.env`, then exit non-zero without starting. The check lives in the wrapper so errors surface directly in the user's terminal — the daemon is backgrounded and its stderr only reaches the log file.
 - `agent/protos stop` — stop it
 - `agent/protos restart` — restart it (with safe-restart protocol below)
 - `agent/protos status` — check if it's running

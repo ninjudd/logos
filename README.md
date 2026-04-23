@@ -59,7 +59,7 @@ test agent
 
 The agent reads `spec/` for the invariants and contracts the implementation must satisfy (tool return shapes, the call/result pairing rule, the skill loader's flat-scan + dual-form + merge behavior, render-filter rules, and so on), writes tests in `agent/test/` that exercise them, and runs the suite. Tests use [vitest](https://vitest.dev) by default.
 
-This is **opt-in** — bootstrap and `update agent` never write tests on their own; the assistant runs fine without them. Tests earn their keep once you start customizing the implementation, since a regression in a spec-defined behavior shows up immediately instead of in the next conversation.
+`test agent` is always a manual step — bootstrap and `update agent` don't run it for you, even after you've used it once.
 
 ## What you get
 

@@ -248,10 +248,14 @@ Framing line for the system prompt:
 Implement `agent/src/channels/index.ts`. Channels are defined in `architecture.md` → Channels (especially the [`send()` contract](architecture.md)).
 
 - At startup, scan `agent/src/channels/` for `*.ts` files to build a **provider map** (filename without extension → imported module). Providers are not activated yet — this map is just a lookup.
-- Load `config/channels.yaml`, run `$NAME` substitution, resolve top-level pointers. For each entry with `enabled !== false`, look up its `provider:` field (default: the entry name) in the provider map. If the provider is missing, error out naming the channel and the expected module path. Call the provider module's `createChannel(name, config, router)` factory with the entry's resolved config. On throw, log the channel name + error message (but not the full config, which may contain secrets) and continue with the remaining channels.
+- Load `config/channels.yaml`, run `$NAME` substitution, resolve top-level pointers.
+- **Validate at load, before activating any channel.** For each entry with `enabled !== false`:
+  - Look up `provider:` (default: the entry name) in the provider map. **If the provider is missing, exit the process non-zero** naming the channel and the expected module path (e.g. `agent/src/channels/{provider}.ts`). This is a config error, not a runtime one — silently skipping would mask a typo until first use.
+  - If the entry has a `model:` field, check it names an existing profile in `config/models.yaml`. Unknown profile → exit non-zero naming the channel and the bad reference. Same rationale as cron `model:` validation below: directive references validate at load, not on first firing.
+- Only after validation passes, call each provider module's `createChannel(name, config, router)` factory with the entry's resolved config. On factory throw, log the channel name + error message (but not the full config, which may contain secrets) and continue with the remaining channels. A runtime failure to connect is different from a config typo — the latter should prevent startup, the former should let other channels come up.
 - The registry collects successfully created channels into a map keyed by `channelId` (the entry name from the YAML) so the scheduler can look up any channel's send function and owner conversation ID.
-- Resolve `primary:` last. If the named channel isn't in the registered map (disabled, failed to connect, or the name doesn't match any entry), error out — the scheduler depends on the primary channel.
-- If no channels registered successfully, exit with a clear error.
+- Resolve `primary:` last. If the named channel isn't in the registered map (disabled, failed to connect, or the name doesn't match any entry), exit non-zero — the scheduler depends on the primary channel.
+- If no channels registered successfully, exit non-zero with a clear error.
 
 ### 6. Build the user's chosen channel
 
@@ -268,6 +272,7 @@ Setting `enabled: false` on the `terminal:` entry in `config/channels.yaml` (or 
 Implement `agent/src/scheduler.ts`. Cron format, merge rules, the merged-job table, and the per-run log layout are defined in `architecture.md` → Scheduler.
 
 - Scan both `spec/cron/` and `config/cron/`, parse frontmatter with `js-yaml`, merge per the layering rules (frontmatter override, body append; skip when merged `enabled: false`).
+- **Validate cron `model:` at load.** After merging, for every enabled job whose merged frontmatter sets `model:`, check it names an existing profile in `config/models.yaml`. Unknown profile → exit non-zero naming the job file and the bad reference. Symmetric with channel `model:` validation in step 5: directive references validate at load, not on first firing.
 - Use `node-cron` to schedule each enabled job using its merged `schedule` field.
 - When a job fires:
    1. **First-run guard.** If `config/SOUL.md` doesn't exist, skip the firing entirely — log a one-line note and return. The agent isn't ready to respond to cron prompts; the next firing after first-run setup works normally.
@@ -276,7 +281,7 @@ Implement `agent/src/scheduler.ts`. Cron format, merge rules, the merged-job tab
    4. Append the cron reminder (see `architecture.md` → Scheduler) to the merged body. Then dispatch through the router as a synthetic message. Pass the cron log file handle so the router can append each agent/tool event to it.
    5. After the agent returns, append a `cron_end` audit event (reply text, `duration_ms`, timestamp).
 - **Honor the `history:` frontmatter field** (default `primary`). The field controls only what the agent **reads** as context: `primary` reads recent primary-thread events; `none` runs with only the synthetic prompt. **Writes are the same in both cases**: the full event stream goes to the cron log; only the final assistant reply goes to the user thread (skipped on `NO_REPLY`). The synthetic prompt and intermediate steps are NOT written to the user thread.
-- **Honor the `model:` frontmatter field** (default: `default` profile). Resolve the profile name through `config/models.yaml` via the model resolver from step 4; pass the resulting client through to the agent invocation. Unknown profile → log an error and skip the firing (next firing works normally if the config was fixed in the interim).
+- **Honor the `model:` frontmatter field** (default: `default` profile). Validated at load (see above — unknown profile exits non-zero at startup, so firing time never sees an unresolved name). At firing time, resolve the profile through the model resolver from step 4 and pass the resulting client through to the agent invocation.
 - Add a CLI subcommand `agent/protos cron` that prints the merged job table with source annotations (`[spec]`, `[config]`, `[spec → overridden by config]`, `[disabled]`).
 
 ### 8. Wire it all together

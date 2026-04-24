@@ -233,7 +233,7 @@ reasoning:
 
 **Hints vs. directives.** Channel `model:`, cron `model:`, explicit `delegate_task` `model:`, and profile `fallback:` are **directives** — an unknown profile errors (at load for static references, at call time for dynamic). Skill `preferred_model:` is a **hint** — if the named profile doesn't exist, the preference is silently skipped and resolution continues (next skill's preference, else `subagent`). This lets skills ship with reasonable preferences without forcing every user to define a matching profile.
 
-**Validation at load.** The loader validates every profile resolves (no unknown pointers, no cycles), every resolved profile has provider + model + api_key after env substitution, every directive reference (channel `model:`, profile `fallback:`) points at an existing profile. Skill `preferred_model:` is a hint and is NOT validated at load. Today "load" = startup. If reload is added later, the same validation runs each time.
+**Validation at load.** The loader validates every profile resolves (no unknown pointers, no cycles), every resolved profile has provider + model + api_key after env substitution, and every directive reference (channel `model:` in `channels.yaml`, cron `model:` in merged frontmatter, profile `fallback:`) points at an existing profile. Skill `preferred_model:` is a hint and is NOT validated at load. Today "load" = startup; validation failures exit the process non-zero with a message naming the file and the offending reference. If reload is added later, the same validation runs each time.
 
 **Temperature** is a per-profile field. Other knobs (max tokens, thinking budget, …) can be added later — keep the schema minimal until there's demand.
 

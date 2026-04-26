@@ -115,6 +115,8 @@ A short list of code-level rules. Each has an anchor — a concrete failure mode
 - **`@typescript-eslint/ban-ts-comment`** — `@ts-ignore` and `@ts-expect-error` require a description of *why*. No silent suppression.
 - **`no-empty`** with `allowEmptyCatch: false` — bare `catch {}` is a lint error. Catch blocks must either have code or a reason comment.
 
+Deliberately **skip** `tseslint.configs.stylistic` and `stylistic-type-checked` — those are formatting/style preferences (prefer `as const`, prefer `??` over `||`, etc.). Out of scope; we enforce correctness, not house style.
+
 Treat lint failures the same as typecheck failures — both abort the safe-restart (see step 9).
 
 ### Convention-only
@@ -122,8 +124,7 @@ Treat lint failures the same as typecheck failures — both abort the safe-resta
 These don't have a clean lint rule but matter:
 
 - **`?.()` on a documented method is a bug smell.** Optional chaining belongs on values that genuinely may be undefined. Calling a method that's part of a typed interface as `obj.method?.(...)` either hides a missing implementation or means the type isn't right — both deserve a real fix, not a silent skip. *Anchor:* `agent.backend.isContinuationInvalid?.(new Error(...))` in router.ts. If the SDK's Backend interface declares the method, the `?.` should be a `.`; if it doesn't, the call shouldn't be there.
-- **`?? null` / `?? undefined` need a one-line reason.** Same family as bare `catch {}` — silent fallbacks paper over missing cases. Explain *why* the fallback is correct, or pick a different shape.
-- **Skip `stylistic` and `stylistic-type-checked`.** Those are formatting/style preferences (prefer `as const`, prefer `??` over `||`, etc.). Out of scope; we enforce correctness, not house style.
+- **`?? null` / `?? undefined` need a one-line comment explaining why the fallback is correct.** Same family as bare `catch {}` — silent fallbacks paper over missing cases. Explain *why* in an inline comment, or pick a different shape.
 
 `review` and `test` should flag both lint-enforced and convention-only violations when they audit `agent/`.
 

@@ -275,8 +275,23 @@ subagent: fast              # string value = pointer to another profile
 | `base_url` | n/a | n/a | optional | required for `openai-compatible` |
 | `organization` | n/a | n/a | optional | n/a |
 | `project` | n/a | n/a | optional | n/a |
+| `permission_mode` | optional — `default` / `acceptEdits` / `plan` / `bypassPermissions` (Claude SDK enum) | n/a | n/a | n/a |
+| `ask_for_approval` | n/a | optional — `never` / `untrusted` / `on-request` / `granular` (Codex enum) | n/a | n/a |
+| `sandbox_mode` | n/a | optional — `read-only` / `workspace-write` / `danger-full-access` (Codex enum) | n/a | n/a |
 | `temperature` | passes through | passes through | passes through | passes through |
 | `fallback` | works | works | works | works |
+
+The permission/sandbox fields use each backend's native enum verbatim — no harmonization across backends. `claude` uses Claude Agent SDK's `permissionMode`; `codex` uses Codex's `AskForApproval` and `SandboxMode`. `openai` and `vercel` have no permission layer in their tool dispatch — bundled in-process tools just execute. (Codex's typed `ask_for_approval` and `sandbox_mode` require agent-sdk's codex-policy-options support; until that lands, the agent passes them via Codex CLI's `-c approval_policy=…` / `-c sandbox_mode=…` overrides.)
+
+**Unattended defaults.** Protos runs as a daemon with no human in the loop to answer permission prompts, so `agent.ts` constructs each Backend with these defaults when the YAML doesn't override:
+
+| Backend | Default for unattended use |
+|---|---|
+| `claude` | `permission_mode: bypassPermissions` |
+| `codex` | `ask_for_approval: never`, `sandbox_mode: workspace-write` |
+| `openai` / `vercel` | n/a — no permission layer; bundled tools run unrestricted |
+
+A user who wants stricter behavior on a specific profile sets a non-default value in `models.yaml`. The trade-off is that any policy that prompts (Claude `default`/`acceptEdits`, Codex `on-request`/`untrusted`/`granular`) will hang the agent waiting for a response — agent-sdk currently auto-declines codex approval requests, and Claude's prompt has no programmatic accept path either. The unattended defaults are the only fully-supported mode today.
 
 For `claude`, setting both `oauth_token:` and `api_key:` on the same profile errors at load (mutually exclusive — agent-sdk's `ClaudeBackend` constructor throws).
 
@@ -880,8 +895,8 @@ cd memory && git init  # commits happen as the agent learns
 
 ## Security considerations
 
-- The agent runs with shell access and the same permissions as the host user. Consider running it on a dedicated machine or in a container.
-- The canonical **`bash` tool** runs commands using bash from the workspace root. On Claude/Codex it runs sandboxed natively; on Vercel/`openai` agent-sdk's bundled impl runs in-process. The agent should confirm destructive commands with the user before running them.
+- **OS sandbox is the safety boundary.** Protos runs unattended, so all four backends are configured to skip in-process permission prompts (see Model selection → Unattended defaults). Tool execution effectively has the same authority as the host user across every backend. Run protos on a dedicated machine, in a container, or under a per-user macOS sandbox profile.
+- The canonical **`bash` tool** runs commands using bash from the workspace root. On Claude with `permission_mode: bypassPermissions` and Codex with `ask_for_approval: never`, the SDKs themselves don't gate execution — they just dispatch. On Vercel and `openai`, agent-sdk's bundled in-process impl runs the command directly. The agent should confirm destructive commands with the user before running them.
 - **Never log credentials.** When catching errors, log only the error message — not full objects, which may contain API tokens or bot secrets.
 - Secrets live in `config/models.yaml` and `config/channels.yaml` (inline, or referenced via `$NAME` substitution from `config/.env`).
 - The thread files in `runtime/threads/` contain all your messages — protect that directory accordingly.

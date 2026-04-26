@@ -23,6 +23,7 @@ Don't worry about the assistant's name or personality — those are configured o
 - `node-cron` — cron expression scheduling
 - `tsx` — TypeScript execution without a compile step. The agent can modify its own source and restart to apply changes.
 - `zod` — schema validation, used by agent-sdk for tool parameter definitions
+- `eslint`, `typescript-eslint` (devDependencies) — bug-preventing lint rules. Configured with `tseslint.configs.recommendedTypeChecked` (type-aware, no style enforcement). See "Implementation conventions" below for the rules and rationale.
 - Channel-specific libraries — see the chosen recipe in `spec/channels/`
 
 agent-sdk pulls in the underlying SDKs (`@anthropic-ai/claude-agent-sdk`, the Codex app-server bridge, `@openai/agents`, `ai` + `@ai-sdk/anthropic` / `@ai-sdk/openai` / `@ai-sdk/openai-compatible`) as transitive dependencies — they install with agent-sdk. There's nothing to install separately for the four backends.
@@ -98,6 +99,36 @@ If the user is updating from a pre-YAML deployment (where `AI_MODEL` / `ANTHROPI
 
 Reference each secret by `$NAME` rather than inlining, so the existing `.env` keeps holding the credentials. Show the user the generated YAML for review before writing; don't touch the original `.env`. The runtime does NOT read the legacy model/channel env vars — the YAML files do, via substitution.
 
+## Implementation conventions
+
+A short list of code-level rules. Each has an anchor — a concrete failure mode it prevents — and most are mechanically enforced by `eslint` (config below). Apply across every step.
+
+### Lint-enforced
+
+`agent/eslint.config.mjs` extends `tseslint.configs.recommendedTypeChecked` (type-aware bug-preventing rules; no style/formatting). The rules with the highest leverage for AI-generated code are:
+
+- **`@typescript-eslint/no-explicit-any`** — bans `as any` and `: any` annotations. *Anchor:* the agent-sdk migration shipped with `msg.attachments as any` when handing the user's `Attachment[]` to `agent.run({ attachments })`. protos's internal shape (`{type, path, media_type}`) doesn't match agent-sdk's (`{type, source: {kind, path}}`), so the bytes never reached the model — and `tsc` would have surfaced the error if not for the cast.
+- **`@typescript-eslint/no-floating-promises`** — every Promise must be `await`ed, returned, or explicitly `void`-ed. Catches `someAsync()` patterns where the await was forgotten — a common AI-generated bug.
+- **`@typescript-eslint/no-misused-promises`** — Promises in `if`/`while` conditions, `forEach(async ...)`, etc.
+- **`@typescript-eslint/no-unsafe-call` / `-member-access` / `-assignment` / `-argument` / `-return`** — the downstream effects of `any` slipping in via JSON parsing, untyped imports, etc. Catches drift even when the cast itself isn't visible. The discipline these push toward (typed parsers, schema validation at boundaries) is correct.
+- **`@typescript-eslint/no-unnecessary-type-assertion`** — flags redundant casts that linger after refactors and start lying about the type.
+- **`@typescript-eslint/ban-ts-comment`** — `@ts-ignore` and `@ts-expect-error` require a description of *why*. No silent suppression.
+- **`@typescript-eslint/no-unused-vars`** with `_`-prefix exemptions (`argsIgnorePattern`, `varsIgnorePattern`, `caughtErrorsIgnorePattern` all set to `^_`) — flags dead bindings and stale catch parameters. The `_`-prefix opt-out is the standard convention for "intentionally unused" so the names stay searchable.
+- **`no-empty`** with `allowEmptyCatch: false` — bare `catch {}` is a lint error. Catch blocks must either have code or a reason comment.
+
+Deliberately **skip** `tseslint.configs.stylistic` and `stylistic-type-checked` — those are formatting/style preferences (prefer `as const`, prefer `??` over `||`, etc.). Out of scope; we enforce correctness, not house style.
+
+Treat lint failures the same as typecheck failures — both abort the safe-restart (see step 9).
+
+### Convention-only
+
+These don't have a clean lint rule but matter:
+
+- **`?.()` on a documented method is a bug smell.** Optional chaining belongs on values that genuinely may be undefined. Calling a method that's part of a typed interface as `obj.method?.(...)` either hides a missing implementation or means the type isn't right — both deserve a real fix, not a silent skip. *Anchor:* `agent.backend.isContinuationInvalid?.(new Error(...))` in router.ts. If the SDK's Backend interface declares the method, the `?.` should be a `.`; if it doesn't, the call shouldn't be there.
+- **`?? null` / `?? undefined` need a one-line comment explaining why the fallback is correct.** Same family as bare `catch {}` — silent fallbacks paper over missing cases. Explain *why* in an inline comment, or pick a different shape.
+
+`review` and `test` should flag both lint-enforced and convention-only violations when they audit `agent/`.
+
 ## Step-by-step
 
 **Note:** Default cron jobs (`spec/cron/heartbeat.md`, `spec/cron/nap.md`, `spec/cron/dream.md`) and bundled skills (`spec/skills/`) ship with the spec. The running agent reads these directly. Don't copy them into `agent/`.
@@ -110,6 +141,7 @@ Reference each secret by `$NAME` rather than inlining, so the existing `.env` ke
 - Install packages with `npm install <package-name>` from inside `agent/` rather than writing `package.json` by hand — this ensures you get the latest versions and only lists direct dependencies. **Never manually edit the `dependencies` or `devDependencies` objects in `package.json`.**
 - Source code goes in `agent/src/` per the file structure in `architecture.md`.
 - Use `process.cwd()` for the workspace root path, not `import.meta.dirname` — tsx runs in CJS mode where `import.meta.dirname` is undefined. The wrapper script ensures the process runs with the workspace root as cwd.
+- Create `agent/eslint.config.mjs` extending `tseslint.configs.recommendedTypeChecked` with type-aware analysis enabled (`languageOptions.parserOptions.project: ['./tsconfig.json']`). See "Implementation conventions" above for the rule list and rationale. Add `"lint": "eslint src"` and `"typecheck": "tsc --noEmit"` to `agent/package.json`'s `scripts`. Both run from inside `agent/` (where `node_modules/` lives).
 - Create `config/` if it doesn't exist (the agent should do this on first run, but the build can pre-create it). Write three templates:
   - `config/models.yaml` — a single `default:` profile with `backend: claude` and a current Claude Sonnet model ID. The user runs `claude setup-token` once to populate `CLAUDE_CODE_OAUTH_TOKEN` (subscription billing). The user can edit to pick a different backend (`codex`, `openai`, `vercel`), add providers, or add more profiles. Drop a comment in the template pointing at `architecture.md` → Model selection → Backends.
   - `config/channels.yaml` — `primary:` pointing at the user's chosen channel, one block for that channel with credentials referenced via `$NAME`, and a `terminal: { enabled: true }` block.
@@ -147,6 +179,8 @@ The router serializes per-conversation, so `appendEvent` never has a concurrent 
 
 **Tee from agent-sdk.** Wrap `agent.run({...})` and consume the returned `query.events` AsyncIterable: for every `text_end`, `tool_call_end`, and `tool_result` event, build a thread `Event` and call `appendEvent`. Capture the first `session_start.continuation` token and persist it via `writeContinuation`.
 
+**Multi-step turns produce multiple assistant Events.** A single agent turn can emit several `text_end` events — typically one between tool round-trips ("let me check..." → tool call → tool result → "the answer is..."). Each `text_end` followed by a `tool_call_end` and `tool_result` flushes a new assistant Event into the JSONL, paired with its tool calls. The render filter and channel.send must use the **last assistant Event of the turn** (concatenating across all flushed text segments isn't right — it'd glue together unrelated thinking), and that Event's full text. Extract by tracking the last flushed assistant Event during the tee, or read it back from the JSONL after `turn_end`.
+
 **Cron logs.** The same `appendEvent` primitive can target cron log paths via a variant (`appendCronEvent(jobname, timestamp, event)`); cron logs are not per-profile (each run is a single backend invocation, so one JSONL per run is enough). Sub-agent logs are similar — one log per call, no per-profile fan-out.
 
 ### 3. Build the router
@@ -162,7 +196,7 @@ Implementation:
   1. Generate a `turn_id`, append the user event to `{profile}.jsonl` via `threads.appendEvent` (timestamp included).
   2. Read `{profile}.continuation` (if any). Compute the gap-recap per the five cases in `architecture.md` → Session continuity (using `readProfileEvents` and `readMergedEvents` to detect what other profiles have done since this one last ran).
   3. Build the user message string: optional gap-recap + the `[sent …]`-prefixed actual text. Build `QueryInput.attachments` from any user-event attachments.
-  4. Call `agent.run({ message, continuation?, attachments? })` on the resolved profile's cached `Agent`. Tee `query.events` into `{profile}.jsonl`. Persist the first `session_start.continuation` to `{profile}.continuation`. On `isContinuationInvalid` errors, clear the sidecar and retry as case 3.
+  4. Call `agent.run({ message, continuation?, attachments? })` on a freshly-built `Agent` for the resolved profile (see "per-dispatch Agent factory" below). Tee `query.events` into `{profile}.jsonl`. Persist the first `session_start.continuation` to `{profile}.continuation`. On `isContinuationInvalid` errors, clear the sidecar and retry as case 3.
 - After the run completes, the final assistant text has already been appended (via the tee). Extract it and call `channel.send(conversationId, reply)`.
 - The reply is stored and sent **as-is** — including the literal string `NO_REPLY`. No translation. Channels detect `NO_REPLY` themselves per the contract.
 
@@ -170,7 +204,7 @@ Implementation:
 
 Use agent-sdk's `Agent` + `agent.run()` for automatic tool execution. Cap each `Agent` at the SDK default (~25 turns). Do not manually implement a tool loop, manage history, or guard tokens — agent-sdk owns all three.
 
-- Build a **profile-to-Agent resolver** from `config/models.yaml` at startup per `architecture.md` → Model selection. Expose a helper like `agentForProfile(profileName)` → `Agent` that the router/scheduler/sub-agent runner call with the resolved profile name. Construct each profile's `Agent` once on first use and cache it (one `Agent` per profile); reuse across dispatches.
+- Build a **per-dispatch Agent factory** keyed on profile name per `architecture.md` → Model selection. Expose a helper like `buildAgent(profileName, instructions, tools)` → `Agent` that the router/scheduler/sub-agent runner call with the resolved profile name. **Do not cache** — the system prompt embeds dynamic state (memory manifest, recent journal, `SOUL.md`) that must be re-read per dispatch, and agent-sdk takes the system prompt at Backend construction. Per-dispatch reconstruction is cheap on Claude/OpenAI/Vercel (the Backend just wraps an SDK client); on Codex it spawns a new `app-server` subprocess per dispatch (~100–500ms), which is small relative to model latency for conversational use. If subprocess churn becomes a problem for a heavy automation use case, the right fix is upstream — agent-sdk would need to accept `instructions` per `agent.run()` call rather than at Backend construction.
 - **Apply unattended defaults** at Backend construction (per `architecture.md` → Model selection → Unattended defaults). For each `claude` profile that doesn't set `permission_mode:` in YAML, pass `permissionMode: 'bypassPermissions'` to the agent-sdk Backend. For each `codex` profile that doesn't set `ask_for_approval:` / `sandbox_mode:`, pass `askForApproval: 'never'` and `sandboxMode: 'workspace-write'`. YAML values, when present, override the defaults.
 - Wrap every `agent.run()` call through a **fallback-aware adapter**: on credit-exhausted, rate-limit, or provider 5xx, or connection errors, look up the resolved profile's `fallback:` (if any), build the fallback profile's `Agent`, and retry once with the fallback. Cross-backend fallback works — the adapter wraps `agent.run` regardless of backend. Auth and 4xx-other errors pass through. Continuation tokens are profile-scoped (per `architecture.md` → Session continuity), so a fallback retry uses the fallback profile's continuation, not the failed profile's.
 - The dispatcher reads continuation + computes any gap-recap per the five cases in `architecture.md` → Session continuity, then calls `agent.run({ message, continuation?, attachments? })`. Tee `query.events` into the appropriate `{profile}.jsonl`; persist the first `session_start.continuation` to the sidecar.
@@ -349,7 +383,7 @@ Use a PID file at `runtime/agent.pid` and write logs to `runtime/logs/`. Both ar
 **Safe-restart protocol for `restart`** (architecture: see `architecture.md` → Self-modification):
 
 1. **Snapshot the current `agent/` HEAD.** If `agent/` is a Git repo (`agent/.git` exists), record the current commit SHA with `git -C agent rev-parse HEAD`. If it's not a Git repo, skip the rollback steps below and warn the user that self-edit rollback won't work.
-2. **Typecheck.** Invoke TypeScript from inside `agent/` (where its `node_modules` lives) — e.g. `npm --prefix agent run typecheck` or `(cd agent && npx tsc --noEmit)`. Don't `npx tsc` from the workspace root: there's no `node_modules/.bin/tsc` there, and `npx` will print "This is not the tsc command you are looking for" and fail. If the typecheck fails, abort the restart, keep the old process running, and print the error.
+2. **Typecheck and lint.** Invoke both from inside `agent/` (where its `node_modules` lives) — `npm --prefix agent run typecheck && npm --prefix agent run lint`, or `(cd agent && npx tsc --noEmit && npx eslint src)`. Don't `npx tsc` / `npx eslint` from the workspace root: `node_modules/.bin/` lives in `agent/`, and `npx` would print "This is not the tsc command you are looking for" and fail. Run typecheck first (lint's type-aware rules require a working type graph). If either fails, abort the restart, keep the old process running, and print the error.
 3. **Stop the old process** (if running) and **start the new one** in the background.
 4. **Health check.** Wait a few seconds (e.g. 5s) and check if the new PID is still alive. If dead:
    - Print the last ~30 lines of the log so the user can see what crashed.
@@ -363,6 +397,7 @@ Auto-revert only affects commits the agent itself made between the snapshot and 
 Verify the build before handing it off:
 
 - `tsc --noEmit` (against `agent/tsconfig.json`) passes with no errors
+- `eslint src` (from inside `agent/`) passes with no errors
 - `agent/protos start` with blank credentials fails and shows the error in the terminal
 - `agent/protos start` with blank credentials then `agent/protos status` reports not running
 - `config/SOUL.md` does not exist yet (it's written on first run, not by the build)

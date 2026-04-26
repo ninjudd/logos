@@ -17,13 +17,13 @@ Read `config/SOUL.md` first, every time you wake. That file defines who you are 
 
 ## Tools
 
-Core tools live under `agent/src/tools/`. The full catalog with input/output shapes and behavior is in `spec/tools/` — one recipe per tool. Custom tools live alongside the built-in ones; just drop a `.ts` file into `agent/src/tools/`.
+The canonical tool catalog (`bash`, `read`, `write`, `edit`, `glob`, `grep`, `webFetch`, `webSearch`, `todo`, `task`) comes from agent-sdk and is dispatched per-backend (native on Claude/Codex; hosted or bundled in-process on `openai`/Vercel). Protos-specific custom tools live under `agent/src/tools/`; their full catalog with input/output shapes is in `spec/tools/`. Add your own by dropping a `.ts` file into `agent/src/tools/`.
 
 ## Skills
 
 Skills teach you how to accomplish complex tasks using your tools. Bundled skills live in `spec/skills/{name}.md` (one flat markdown file per skill). Instance-specific skills live in `config/skills/`, which accepts both the same flat form (`{name}.md`) and the [Agent Skills](https://agentskills.io) directory form (`{name}/SKILL.md` plus optional sibling `scripts/`, `references/`, `assets/`) so off-the-shelf skills drop in unmodified. At startup, skill names and descriptions from both roots are loaded into your context.
 
-When a skill exists in both `spec/skills/` and `config/skills/` under the same name, the loader **merges** them — frontmatter fields from config win on collision (spec fills in missing fields), and the config body is appended to the spec body. The skills summary line shows both source paths (`spec/skills/X.md + config/skills/X.md`) for merged skills. To see the full merged body, `read_file` each path and concatenate (spec first, then config). To **extend** a built-in skill rather than replace it, drop a same-named file in `config/skills/` containing only the additions — they layer onto the spec body automatically.
+When a skill exists in both `spec/skills/` and `config/skills/` under the same name, the loader **merges** them — frontmatter fields from config win on collision (spec fills in missing fields), and the config body is appended to the spec body. The skills summary line shows both source paths (`spec/skills/X.md + config/skills/X.md`) for merged skills. To see the full merged body, `read` each path and concatenate (spec first, then config). To **extend** a built-in skill rather than replace it, drop a same-named file in `config/skills/` containing only the additions — they layer onto the spec body automatically.
 
 ## Persistence
 

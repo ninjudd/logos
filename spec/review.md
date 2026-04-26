@@ -23,7 +23,7 @@ Plus structural checks `test` doesn't easily catch:
 
 - **File layout** — channels in `agent/src/channels/`, tools in `agent/src/tools/`, sub-agent runner in `agent/src/agents/runner.ts`.
 - **Wrapper script** — type-checks before restart; auto-reverts a bad self-edit by reverting the last commit in `agent/`.
-- **Permission guards** — always-on `spec/` write guard; conditional `agent/` write guard when `PROTOS_SELF_EDIT=false`; `self-edit` skill hidden from the prompt when disabled.
+- **Self-edit posture** — the skills loader honors `enabled: false` frontmatter (used to hide `self-edit` from the prompt when the user disables it); no in-process write guards (path discipline is convention + OS-level chmod per `architecture.md` → Self-modification).
 - **Bundled skills present** — every skill listed in `spec/skills/` exists; spec recipes in `spec/channels/` and `spec/tools/` are reflected in `agent/src/`.
 
 ## What NOT to flag

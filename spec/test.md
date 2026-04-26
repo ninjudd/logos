@@ -41,4 +41,4 @@ Spec-defined invariants and contracts — things the spec explicitly promises ab
 
 ## Run logs
 
-Tee the full test runner output to `runtime/tests/{ISO-timestamp}.log` (e.g. `runtime/tests/2026-04-23T18:02:49Z.log`) so the user can dig into a failure after the fact without re-running. Same shape as cron logs under `runtime/logs/cron/` — append-only, never trimmed, useful for the agent itself to read back via `read_file` if asked to investigate a past failure. Show the last few lines of the log path in the chat reply so the user knows where to look.
+Tee the full test runner output to `runtime/tests/{ISO-timestamp}.log` (e.g. `runtime/tests/2026-04-23T18:02:49Z.log`) so the user can dig into a failure after the fact without re-running. Same shape as cron logs under `runtime/logs/cron/` — append-only, never trimmed, useful for the agent itself to read back via `read` if asked to investigate a past failure. Show the last few lines of the log path in the chat reply so the user knows where to look.

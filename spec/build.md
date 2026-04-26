@@ -145,10 +145,14 @@ Implement `agent/src/router.ts`. Behavior contract is in `architecture.md` → R
 Implementation:
 
 - Per-conversation queue keyed on the composite `(channelId, conversationId)` so each conversation runs serially. Don't key on `conversationId` alone — two channels could happen to share the same conversation-id string and end up sharing a queue.
-- **`turn_id` assignment.** User events and the assistant invocation that responds get **different** `turn_id`s. Every event from the same invocation (the user message, or the assistant's multi-step response) shares one `turn_id`. Generate a fresh id at each invocation boundary (uuid or a timestamp-based id).
-- For each inbound message: generate a `turn_id`, append the user event via `threads.appendEvent`, read recent events via `threads.readEvents`, build LLM messages via `threads.buildLlmMessages`, call the agent (passing a fresh `turn_id` for its invocation).
-- The agent runs its multi-step loop. As it produces assistant steps (text + tool calls) and tool results, append each as its own event with the agent's `turn_id`.
-- After the agent returns, the final assistant text has already been appended. Extract it and call `channel.send(conversationId, reply)`.
+- **`turn_id` assignment.** User events and the assistant invocation that responds get **different** `turn_id`s. Every event from the same invocation shares one `turn_id`. Generate a fresh id at each invocation boundary (uuid or a timestamp-based id).
+- **Profile resolution.** Resolve the active model profile per the rules in `architecture.md` → Model selection (channel `model:` → `default`; cron `model:` for cron firings; explicit override for sub-agent paths). The chosen profile selects which `{profile}.jsonl` and `{profile}.continuation` to use.
+- **For each inbound message:**
+  1. Generate a `turn_id`, append the user event to `{profile}.jsonl` via `threads.appendEvent` (timestamp included).
+  2. Read `{profile}.continuation` (if any). Compute the gap-recap per the five cases in `architecture.md` → Session continuity (using `readProfileEvents` and `readMergedEvents` to detect what other profiles have done since this one last ran).
+  3. Build the user message string: optional gap-recap + the `[sent …]`-prefixed actual text. Build `QueryInput.attachments` from any user-event attachments.
+  4. Call `agent.run({ message, continuation?, attachments? })` on the resolved profile's cached `Agent`. Tee `query.events` into `{profile}.jsonl`. Persist the first `session_start.continuation` to `{profile}.continuation`. On `isContinuationInvalid` errors, clear the sidecar and retry as case 3.
+- After the run completes, the final assistant text has already been appended (via the tee). Extract it and call `channel.send(conversationId, reply)`.
 - The reply is stored and sent **as-is** — including the literal string `NO_REPLY`. No translation. Channels detect `NO_REPLY` themselves per the contract.
 
 ### 4. Build the agent

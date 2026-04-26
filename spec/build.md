@@ -23,6 +23,7 @@ Don't worry about the assistant's name or personality — those are configured o
 - `node-cron` — cron expression scheduling
 - `tsx` — TypeScript execution without a compile step. The agent can modify its own source and restart to apply changes.
 - `zod` — schema validation, used by agent-sdk for tool parameter definitions
+- `eslint`, `typescript-eslint` (devDependencies) — bug-preventing lint rules. Configured with `tseslint.configs.recommendedTypeChecked` (type-aware, no style enforcement). See "Implementation conventions" below for the rules and rationale.
 - Channel-specific libraries — see the chosen recipe in `spec/channels/`
 
 agent-sdk pulls in the underlying SDKs (`@anthropic-ai/claude-agent-sdk`, the Codex app-server bridge, `@openai/agents`, `ai` + `@ai-sdk/anthropic` / `@ai-sdk/openai` / `@ai-sdk/openai-compatible`) as transitive dependencies — they install with agent-sdk. There's nothing to install separately for the four backends.
@@ -100,13 +101,31 @@ Reference each secret by `$NAME` rather than inlining, so the existing `.env` ke
 
 ## Implementation conventions
 
-A short list of code-level rules. Each one has an anchor — a concrete failure mode it would have prevented in this codebase. Apply them across every step below.
+A short list of code-level rules. Each has an anchor — a concrete failure mode it prevents — and most are mechanically enforced by `eslint` (config below). Apply across every step.
 
-- **No `as any` or `as unknown as T` casts.** TypeScript catches structural mismatches; bypassing it lets bugs through compile and review. The fix is always a typed mapper or a structural type, never a cast. *Anchor:* the agent-sdk migration shipped with `msg.attachments as any` when handing the user's `Attachment[]` to `agent.run({ attachments })`. protos's internal shape (`{type, path, media_type}`) doesn't match agent-sdk's (`{type, source: {kind, path}}`), so the bytes never reached the model — and `tsc` would have surfaced the error if not for the cast.
-- **`?.()` on a documented method is a bug smell.** Optional chaining belongs on values that genuinely may be undefined (DOM nodes, optional fields). Calling a method that's part of a typed interface as `obj.method?.(...)` either hides a missing implementation or means the type isn't right — both deserve a real fix, not a silent skip. *Anchor:* `agent.backend.isContinuationInvalid?.(new Error(...))` in router.ts. If the SDK's Backend interface declares the method, the `?.` should be a `.`; if it doesn't, the call shouldn't be there.
-- **Bare `catch {}` and `?? null` need a one-line reason.** Silently disappearing errors is the most common way for AI-generated code to look correct while masking real failures. `catch (e) { /* ENOENT is fine — file may not yet exist */ }` is acceptable; an unexplained `catch {}` is not. Same rule for `?? null` / `?? undefined` patterns that paper over a missing case — explain *why* the fallback is correct, or pick a different shape.
+### Lint-enforced
 
-These rules are enforcement-by-convention, not lint rules — but `review` and `test` should flag violations of (1) and (3) when they audit `agent/`.
+`agent/eslint.config.mjs` extends `tseslint.configs.recommendedTypeChecked` (type-aware bug-preventing rules; no style/formatting). The rules with the highest leverage for AI-generated code are:
+
+- **`@typescript-eslint/no-explicit-any`** — bans `as any` and `: any` annotations. *Anchor:* the agent-sdk migration shipped with `msg.attachments as any` when handing the user's `Attachment[]` to `agent.run({ attachments })`. protos's internal shape (`{type, path, media_type}`) doesn't match agent-sdk's (`{type, source: {kind, path}}`), so the bytes never reached the model — and `tsc` would have surfaced the error if not for the cast.
+- **`@typescript-eslint/no-floating-promises`** — every Promise must be `await`ed, returned, or explicitly `void`-ed. Catches `someAsync()` patterns where the await was forgotten — a common AI-generated bug.
+- **`@typescript-eslint/no-misused-promises`** — Promises in `if`/`while` conditions, `forEach(async ...)`, etc.
+- **`@typescript-eslint/no-unsafe-call` / `-member-access` / `-assignment` / `-argument` / `-return`** — the downstream effects of `any` slipping in via JSON parsing, untyped imports, etc. Catches drift even when the cast itself isn't visible. The discipline these push toward (typed parsers, schema validation at boundaries) is correct.
+- **`@typescript-eslint/no-unnecessary-type-assertion`** — flags redundant casts that linger after refactors and start lying about the type.
+- **`@typescript-eslint/ban-ts-comment`** — `@ts-ignore` and `@ts-expect-error` require a description of *why*. No silent suppression.
+- **`no-empty`** with `allowEmptyCatch: false` — bare `catch {}` is a lint error. Catch blocks must either have code or a reason comment.
+
+Treat lint failures the same as typecheck failures — both abort the safe-restart (see step 9).
+
+### Convention-only
+
+These don't have a clean lint rule but matter:
+
+- **`?.()` on a documented method is a bug smell.** Optional chaining belongs on values that genuinely may be undefined. Calling a method that's part of a typed interface as `obj.method?.(...)` either hides a missing implementation or means the type isn't right — both deserve a real fix, not a silent skip. *Anchor:* `agent.backend.isContinuationInvalid?.(new Error(...))` in router.ts. If the SDK's Backend interface declares the method, the `?.` should be a `.`; if it doesn't, the call shouldn't be there.
+- **`?? null` / `?? undefined` need a one-line reason.** Same family as bare `catch {}` — silent fallbacks paper over missing cases. Explain *why* the fallback is correct, or pick a different shape.
+- **Skip `stylistic` and `stylistic-type-checked`.** Those are formatting/style preferences (prefer `as const`, prefer `??` over `||`, etc.). Out of scope; we enforce correctness, not house style.
+
+`review` and `test` should flag both lint-enforced and convention-only violations when they audit `agent/`.
 
 ## Step-by-step
 
@@ -120,6 +139,7 @@ These rules are enforcement-by-convention, not lint rules — but `review` and `
 - Install packages with `npm install <package-name>` from inside `agent/` rather than writing `package.json` by hand — this ensures you get the latest versions and only lists direct dependencies. **Never manually edit the `dependencies` or `devDependencies` objects in `package.json`.**
 - Source code goes in `agent/src/` per the file structure in `architecture.md`.
 - Use `process.cwd()` for the workspace root path, not `import.meta.dirname` — tsx runs in CJS mode where `import.meta.dirname` is undefined. The wrapper script ensures the process runs with the workspace root as cwd.
+- Create `agent/eslint.config.mjs` extending `tseslint.configs.recommendedTypeChecked` with type-aware analysis enabled (`languageOptions.parserOptions.project: ['./tsconfig.json']`). See "Implementation conventions" above for the rule list and rationale. Add `"lint": "eslint src"` and `"typecheck": "tsc --noEmit"` to `agent/package.json`'s `scripts`. Both run from inside `agent/` (where `node_modules/` lives).
 - Create `config/` if it doesn't exist (the agent should do this on first run, but the build can pre-create it). Write three templates:
   - `config/models.yaml` — a single `default:` profile with `backend: claude` and a current Claude Sonnet model ID. The user runs `claude setup-token` once to populate `CLAUDE_CODE_OAUTH_TOKEN` (subscription billing). The user can edit to pick a different backend (`codex`, `openai`, `vercel`), add providers, or add more profiles. Drop a comment in the template pointing at `architecture.md` → Model selection → Backends.
   - `config/channels.yaml` — `primary:` pointing at the user's chosen channel, one block for that channel with credentials referenced via `$NAME`, and a `terminal: { enabled: true }` block.
@@ -361,7 +381,7 @@ Use a PID file at `runtime/agent.pid` and write logs to `runtime/logs/`. Both ar
 **Safe-restart protocol for `restart`** (architecture: see `architecture.md` → Self-modification):
 
 1. **Snapshot the current `agent/` HEAD.** If `agent/` is a Git repo (`agent/.git` exists), record the current commit SHA with `git -C agent rev-parse HEAD`. If it's not a Git repo, skip the rollback steps below and warn the user that self-edit rollback won't work.
-2. **Typecheck.** Invoke TypeScript from inside `agent/` (where its `node_modules` lives) — e.g. `npm --prefix agent run typecheck` or `(cd agent && npx tsc --noEmit)`. Don't `npx tsc` from the workspace root: there's no `node_modules/.bin/tsc` there, and `npx` will print "This is not the tsc command you are looking for" and fail. If the typecheck fails, abort the restart, keep the old process running, and print the error.
+2. **Typecheck and lint.** Invoke both from inside `agent/` (where its `node_modules` lives) — `npm --prefix agent run typecheck && npm --prefix agent run lint`, or `(cd agent && npx tsc --noEmit && npx eslint src)`. Don't `npx tsc` / `npx eslint` from the workspace root: `node_modules/.bin/` lives in `agent/`, and `npx` would print "This is not the tsc command you are looking for" and fail. Run typecheck first (lint's type-aware rules require a working type graph). If either fails, abort the restart, keep the old process running, and print the error.
 3. **Stop the old process** (if running) and **start the new one** in the background.
 4. **Health check.** Wait a few seconds (e.g. 5s) and check if the new PID is still alive. If dead:
    - Print the last ~30 lines of the log so the user can see what crashed.
@@ -375,6 +395,7 @@ Auto-revert only affects commits the agent itself made between the snapshot and 
 Verify the build before handing it off:
 
 - `tsc --noEmit` (against `agent/tsconfig.json`) passes with no errors
+- `eslint src` (from inside `agent/`) passes with no errors
 - `agent/protos start` with blank credentials fails and shows the error in the terminal
 - `agent/protos start` with blank credentials then `agent/protos status` reports not running
 - `config/SOUL.md` does not exist yet (it's written on first run, not by the build)

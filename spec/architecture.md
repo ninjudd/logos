@@ -179,6 +179,7 @@ The agent is the brain. It uses [agent-sdk](https://github.com/ExProtos/agent-sd
 - `add_journal_entry(text)` — append a timestamped line to today's journal
 - `delegate_task({ prompt, skills, tools, model? })` — protos's skill-aware sub-agent (see [Sub-agents](#sub-agents))
 - `browserFetch(url)` — fetch a URL through headless Chromium (Playwright) with Mozilla Readability cleanup. Use for JS-heavy pages, paywalled article previews, and sites that bot-block plain `webFetch`. Available on every backend. See `spec/tools/browser_fetch.md`.
+- `list_skills()` — return the current merged skill manifest (name, description, paths, frontmatter). Use when the agent suspects skills changed during the conversation — the system prompt's manifest is fixed at dispatch time, but skill files on disk may be newer (especially after a `config/skills/` edit by the user mid-conversation). See `spec/tools/list_skills.md`.
 - Plus consolidation/orphan-finder helpers used by cron jobs
 
 Memory-aware tools (`find_memory`, `add_memory`, `rename_memory`) take names in **wiki-link form** — no `memory/` prefix, no `.md` extension. They return full workspace paths (e.g. `memory/preferences/coffee.md`) in their output for interop with `read`.
@@ -713,6 +714,9 @@ spec/
     read_thread_tail.md    # consolidation: read messages since cursor
     advance_thread_cursor.md  # consolidation: mark messages consolidated
     find_orphans.md        # memory hygiene: unreachable non-root files
+    browser_fetch.md       # heavy web tier: headless Chromium + Readability
+    web_search.md          # canonical webSearch — Tavily wiring on Vercel
+    list_skills.md         # introspection: current merged skill manifest
   skills/             # bundled skills (one .md per skill — flat, not the agentskills.io directory format)
     self-edit.md
     git.md
@@ -757,6 +761,7 @@ agent/
       advance_thread_cursor.ts
       find_orphans.ts
       browser_fetch.ts
+      list_skills.ts
       impls/                  # withImpls executes for canonical tools (not standalone tools)
         tavily.ts             # webSearch override on Vercel
     agents/           # delegate_task sub-agent runner (single generic file, no per-agent definitions)

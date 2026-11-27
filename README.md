@@ -113,6 +113,7 @@ It prints the raw and cleaned text and how long the whole run took.
 Hold the hotkey, talk, and let go.
 
 - **While you hold the key**, a pill at the bottom of the screen shows the frequencies in your voice, low pitches on the left. A spinner follows while Logos transcribes and cleans up.
+- **A hold with nothing said** shows "No speech detected" and pastes nothing. Logos measures how loud each recording is before it transcribes it, and a recording quieter than `silenceThresholdDB` goes to no model. Given silence, Whisper models can answer with made-up text, often a word from your dictionary.
 - **A quick tap** shorter than `minHoldSeconds` is ignored. Pressing another key or clicking while you hold a modifier hotkey cancels the recording, so the modifier's shortcuts keep working.
 - **With no text field focused**, such as on the desktop, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, and press Esc or click the X to dismiss the card.
 - **The menu bar icon** has **Settings…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
@@ -130,7 +131,8 @@ This builds and installs the newest release, then restarts the app. Logos checks
 - **Nothing happens when you hold the hotkey.** Check that **Logos** is on in System Settings → Privacy & Security → Accessibility. If it is, turn it off and on again.
 - **The text lands on the clipboard instead of in the app.** The same Accessibility permission is missing.
 - **Another app opens when you double-tap Option**, such as the Claude desktop app's Quick Entry. That app is listening for the same key. Turn off or change its shortcut, or choose another Logos hotkey.
-- **Dictation records silence.** Logos is recording from a device with no microphone attached. Choose **Built-in microphone (recommended)** from the **Microphone** menu in **Settings… → Config**.
+- **"No speech detected" on every dictation.** Logos is recording from a device with no microphone attached. Choose **Built-in microphone (recommended)** from the **Microphone** menu in **Settings… → Config**.
+- **"No speech detected" when you spoke softly.** Your recording was quieter than `silenceThresholdDB`, so Logos didn't transcribe it. Each line of `history.jsonl` gives the dictation's `peakDB`, the level of its loudest 50 milliseconds. Speak closer to the microphone, or set `silenceThresholdDB` below the `peakDB` of your soft speech, such as `-55`.
 - **"The microphone didn't respond."** The audio system was busy, usually because a display or an audio interface was connecting. Dictate again.
 - **"Cleanup failed, pasted raw text."** The message names the cause, usually a missing or mistyped API key. Check the key under **API keys** in **Settings… → Config**.
 - **A card appears where you expected a paste.** Logos didn't recognize that app's text field. Add the app's bundle ID to `alwaysPasteApps` in `config.json`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
@@ -143,7 +145,7 @@ Logos keeps its files in `~/.config/logos/` and rereads each one when it changes
 - **`config.json`** holds settings and API keys, readable only by you. The **Config** tab writes only the setting you change, so settings you add by hand are kept.
 - **`prompt.md`** is the cleanup prompt.
 - **`dictionary.txt`** is your dictionary.
-- **`history.jsonl`** logs each dictation's raw and cleaned text, models, and timings.
+- **`history.jsonl`** logs each dictation's raw and cleaned text, models, timings, and loudness.
 - **`context.d/`** holds files other apps write to tell Logos what to listen for.
 
 Models are named `provider/model`, and each provider's key goes under `keys`. You can leave out any setting you don't change:
@@ -162,6 +164,7 @@ A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variabl
 | --- | --- | --- |
 | `hotkey` | `option` | The key to hold. A modifier alone, either side or one side (`option`, `rightOption`, `leftCommand`, `fn`), or any key with optional modifiers (`f13`, `ctrl+space`, `cmd+shift+d`). |
 | `minHoldSeconds` | `0.3` | The shortest hold that counts as a dictation. |
+| `silenceThresholdDB` | `-45` | The level below which a recording counts as silence, in decibels below the loudest sound a recording can hold (dBFS). Logos measures the recording's loudest 50 milliseconds. Below this level, the recording goes to no model and nothing is pasted. Speech usually measures between -30 and -10, and a quiet room between -60 and -50. `-100` sends every recording. |
 | `inputDevice` | `builtIn` | The microphone: `builtIn`, `system` for macOS's default input, or a device's UID from the **Microphone** menu. |
 | `transcription.model` | `apple` | The speech model. |
 | `transcription.locale` | `en-US` | The language you speak. |

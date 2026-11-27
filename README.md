@@ -8,6 +8,8 @@ There is no Logos server. The app calls each provider's API directly from your M
 
 You need macOS 26 or later. Setup takes about five minutes.
 
+To have a coding agent such as Claude Code, Cursor, or Codex do it for you, give it https://logosvoice.dev/install.md, or use the **Copy prompt** button on [logosvoice.dev](https://logosvoice.dev).
+
 1. Install Apple's free Command Line Tools, which Logos builds with. Skip this step if you already have Xcode.
 
    ```sh

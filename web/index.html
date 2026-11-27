@@ -88,6 +88,29 @@
     .install button:hover { background: rgba(255, 255, 255, 0.2); }
     .note { font-size: 15px; color: var(--muted); }
 
+    .agent {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+      margin: 0 0 8px; padding: 12px 16px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    }
+    .agent p { flex: 1 1 16em; margin: 0; font-size: 15px; line-height: 1.45; }
+    .agent p span { display: block; color: var(--muted); font-size: 14px; }
+    .agent button {
+      flex: none; border: 0; border-radius: 8px; padding: 6px 12px;
+      background: var(--fg); color: var(--bg); font: inherit; font-size: 14px; cursor: pointer;
+    }
+    .agent button:hover { opacity: 0.85; }
+    .prompt { flex: 1 1 100%; font-size: 14px; }
+    .prompt summary { color: var(--accent); cursor: pointer; width: fit-content; }
+    .prompt pre {
+      margin: 8px 0 0; max-height: 22em; overflow-y: auto;
+      white-space: pre-wrap; overflow-wrap: break-word; font-size: 13px;
+    }
+    .visually-hidden {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+
     .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 18px; }
     .feature { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
     .feature h3 { font-size: 17px; margin: 0 0 6px; }
@@ -125,6 +148,26 @@
     <code id="install">curl -fsSL https://logosvoice.dev/install.sh | bash</code>
     <button type="button" id="copy">Copy</button>
   </div>
+  <div class="agent">
+    <p>Or have your AI agent install it <span>Paste the prompt into Claude Code, Cursor, or Codex.</span></p>
+    <button type="button" id="copy-prompt">Copy prompt</button>
+    <details class="prompt" id="prompt-details">
+      <summary>View prompt</summary>
+      <!-- The same text as web/install.md; scripts/check-prompt.sh fails the build when they differ. -->
+      <pre id="prompt">Install Logos on this Mac for me. Logos is an open-source macOS menu-bar dictation app (https://logosvoice.dev, source https://github.com/ninjudd/logos). You run the commands. Some steps only I can do; for those, stop, tell me exactly what to do, and wait until I say it's done.
+
+Don't use sudo. Don't try to grant macOS permissions yourself: no tccutil, no editing TCC databases, no scripting clicks in System Settings. Don't ask me to paste API keys into this chat, and never print, copy, or commit ~/.config/logos/config.json.
+
+1. Prerequisites. Run `sw_vers -productVersion`; Logos needs macOS 26 or later, so stop and tell me if it's older. Run `xcrun --find swift`. If that fails, ask me to run `xcode-select --install` and finish its installer window, then check again.
+2. Install. Show me what the installer does first: fetch https://logosvoice.dev/install.sh and summarize it in two sentences. Then run `curl -fsSL https://logosvoice.dev/install.sh | bash`. It downloads the latest release's source from GitHub, builds it (a few minutes), installs /Applications/Logos.app, links the `logos` command into ~/.local/bin, and starts the app. If it fails, show me the error and stop.
+3. Verify: /Applications/Logos.app exists, `pgrep -x Logos` finds it running, and `~/.local/bin/logos version` prints a version. If ~/.local/bin isn't on my PATH, tell me and offer to add it to my shell profile; only edit the profile if I agree.
+4. Permissions (my step). Tell me: when Logos starts, macOS asks for microphone access; click Allow. Then turn on Logos in System Settings → Privacy &amp; Security → Accessibility; you may open that pane for me with `open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"`. Until it's on, holding Option does nothing; Logos notices the change within a few seconds, with no restart.
+5. API keys (my step). Explain: transcription starts on Apple's on-device model, which needs no key; cleanup uses an Anthropic model and needs an Anthropic API key. Without one, Logos still pastes the raw transcript and shows "Cleanup failed, pasted raw text: No anthropic key…". For faster, more accurate transcription, Groq's free tier works well. Tell me to create the keys I want at console.anthropic.com and console.groq.com and paste them into Logos myself: click the waveform icon in the menu bar → Settings… → Config → API keys, and choose `groq/whisper-large-v3-turbo` from the Model menu under Transcription if I added a Groq key. Don't handle the keys yourself.
+6. Test without the microphone: `say -o /tmp/logos-test.wav --data-format=LEI16@16000 "Um, testing Logos dictation"`, then `env -u ANTHROPIC_API_KEY -u GROQ_API_KEY -u OPENAI_API_KEY ~/.local/bin/logos transcribe /tmp/logos-test.wav`, which hides key variables in my shell because the menu-bar app never sees them. It prints the sentence on a `raw:` line and the cleaned-up text on a `clean:` line. Without an Anthropic key it prints that same "Cleanup failed" warning, which is expected if I skipped that key. Any other warning or error usually means a key is wrong; go back to step 5. Then ask me to click into any text field, hold Option, say a sentence, and let go. If the text appears there, we're done. If holding Option does nothing, Accessibility is still off.
+7. Finish with one short message: what was installed and where, that settings live in ~/.config/logos/ and in Settings… from the menu-bar icon, that `logos update` updates it, and anything I still need to do.</pre>
+    </details>
+  </div>
+  <p class="visually-hidden" id="copy-status" aria-live="polite"></p>
   <p class="note">Needs macOS 26 or later and Apple's free Command Line Tools (<code>xcode-select --install</code>). Logos builds from source on your Mac, so you need no developer account. The source is on <a href="https://github.com/ninjudd/logos">GitHub</a>.</p>
 
   <h2>Why Logos</h2>
@@ -159,15 +202,32 @@
   <footer>Logos is open source under the MIT License, at <a href="https://github.com/ninjudd/logos">github.com/ninjudd/logos</a>. It's built from source on each Mac, and it sends your audio and text only to the providers you configure.</footer>
 </main>
 <script>
-  document.getElementById("copy").addEventListener("click", async (event) => {
-    const button = event.currentTarget;
-    try {
-      await navigator.clipboard.writeText(document.getElementById("install").textContent);
-      button.textContent = "Copied";
-    } catch {
-      button.textContent = "Select and copy";
-    }
-    setTimeout(() => { button.textContent = "Copy"; }, 1500);
+  const copyStatus = document.getElementById("copy-status");
+
+  // Copies the text of `source` when `button` is clicked. When the clipboard
+  // refuses, it selects that text instead so the reader can press ⌘C.
+  function copyOnClick(button, source, beforeSelect) {
+    const label = button.textContent;
+    let timer;
+    button.addEventListener("click", async () => {
+      clearTimeout(timer);
+      try {
+        await navigator.clipboard.writeText(source.textContent);
+        button.textContent = "Copied";
+        copyStatus.textContent = "Copied to the clipboard.";
+      } catch {
+        if (beforeSelect) beforeSelect();
+        getSelection().selectAllChildren(source);
+        button.textContent = "Press ⌘C";
+        copyStatus.textContent = "Couldn't reach the clipboard. The text is selected; press Command-C to copy it.";
+      }
+      timer = setTimeout(() => { button.textContent = label; copyStatus.textContent = ""; }, 2000);
+    });
+  }
+
+  copyOnClick(document.getElementById("copy"), document.getElementById("install"));
+  copyOnClick(document.getElementById("copy-prompt"), document.getElementById("prompt"), () => {
+    document.getElementById("prompt-details").open = true;
   });
 </script>
 </body>

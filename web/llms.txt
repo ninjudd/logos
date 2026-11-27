@@ -1,0 +1,12 @@
+# Logos
+
+> Logos is an open-source dictation app for the Mac menu bar: hold Option, speak, and let go, and it transcribes what you said, cleans it up with a prompt you write and a model you choose, and pastes it where you're typing.
+
+Logos needs macOS 26 or later and builds from source on the Mac it runs on. To install it for someone, follow the agent instructions below.
+
+## Docs
+
+- [Agent install instructions](https://logosvoice.dev/install.md): Steps for a coding agent to install and set up Logos, including the steps it must leave to the person.
+- [Install script](https://logosvoice.dev/install.sh): The shell installer, which builds the latest release, installs /Applications/Logos.app, and links the logos command into ~/.local/bin.
+- [README](https://raw.githubusercontent.com/ninjudd/logos/main/README.md): The setup guide, model choices, configuration reference, and the logos command.
+- [Source code](https://github.com/ninjudd/logos): The GitHub repository.

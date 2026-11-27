@@ -37,7 +37,13 @@ Hold Option, talk, and release. A small pill at the bottom of the screen shows t
 
 When nothing focused takes text, for example the desktop or a button, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, or select part of the text. Press Esc or click the X at the top right to dismiss the card. Starting a new dictation also dismisses it. Logos asks macOS's Accessibility API what has keyboard focus, and when the API can't tell, Logos pastes as usual. If an app's text view isn't recognized and you get the card where you expected a paste, add the app's bundle ID to `alwaysPasteApps`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
 
-The menu bar icon has **Edit Prompt…**, **Edit Dictionary…**, **Edit Config…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
+The menu bar icon has **Settings…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**. Settings has three tabs:
+
+- **Config** covers the hotkey, models, API keys, and other common settings.
+- **Prompt** edits the cleanup prompt.
+- **Dictionary** edits the dictionary.
+
+Changes save as you make them. A setting changed in the Config tab rewrites only that key in `config.json`, so settings you added by hand are kept.
 
 ## Configure it
 

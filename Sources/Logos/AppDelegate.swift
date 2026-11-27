@@ -34,6 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotkey.onPress = { [weak self] in MainActor.assumeIsolated { self?.startRecording() } }
         hotkey.onRelease = { [weak self] in MainActor.assumeIsolated { self?.finishRecording() } }
         hotkey.onCancel = { [weak self] in MainActor.assumeIsolated { self?.cancelRecording() } }
+        hotkey.onKeyDown = { [weak self] keyCode in
+            MainActor.assumeIsolated {
+                let escape: UInt16 = 53
+                if keyCode == escape, self?.overlay.isShowingResult == true { self?.overlay.hide() }
+            }
+        }
         hotkey.install()
         watchAccessibility()
 
@@ -54,7 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         pressedAt = Date()
-        targetApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "an unknown app"
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        targetApp = frontmost?.localizedName ?? "an unknown app"
+        if let pid = frontmost?.processIdentifier { FocusedField.prepare(pid: pid) }
         overlayShown = false
         meterTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -131,6 +139,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .success(let outcome):
             if !outcome.text.isEmpty {
                 lastText = outcome.text
+                if hasNowhereToPaste(config) {
+                    let text = outcome.text
+                    overlay.showResult(text) { [weak self] in
+                        Paster.copy(text)
+                        self?.overlay.flash("Copied", seconds: 1.5, success: true)
+                    }
+                    return
+                }
                 Paster.paste(outcome.text + (config.trailingSpace ? " " : ""), restoreClipboard: config.restoreClipboard)
                 if !AXIsProcessTrusted() {
                     overlay.flash("Copied to the clipboard. Grant Accessibility access to paste automatically.")
@@ -148,11 +164,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func refreshOverlay() {
         if recorder != nil && overlayShown {
             overlay.show(.recording)
-        } else if pending > 0 {
+        } else if pending > 0 && !overlay.isShowingResult {
             overlay.show(.processing(stageLabel))
-        } else if !overlay.isShowingMessage {
+        } else if !overlay.isHoldingContent {
             overlay.hide()
         }
+    }
+
+    /// True when the focused element can't take text, so pressing ⌘V would lose
+    /// the dictation. Without Accessibility access Logos can't tell, and copies.
+    private func hasNowhereToPaste(_ config: Config) -> Bool {
+        guard config.showWhenNoTextField, AXIsProcessTrusted() else { return false }
+        if let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, config.alwaysPasteApps.contains(id) {
+            return false
+        }
+        return FocusedField.acceptsText(FocusedField.current()) == false
     }
 
     // MARK: Accessibility
@@ -221,8 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func copyLast() {
         guard let lastText else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(lastText, forType: .string)
+        Paster.copy(lastText)
     }
 
     @objc private func openAccessibility() {

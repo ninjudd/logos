@@ -6,6 +6,8 @@ final class HotkeyMonitor {
     var onPress: () -> Void = {}
     var onRelease: () -> Void = {}
     var onCancel: () -> Void = {}
+    /// Every key press in any app, by virtual key code.
+    var onKeyDown: (UInt16) -> Void = { _ in }
     var hotkey: () -> Config.Hotkey = { .option }
 
     private var monitors: [Any] = []
@@ -35,6 +37,7 @@ final class HotkeyMonitor {
     private func handle(_ event: NSEvent) {
         if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == Paster.marker { return }
         guard event.type == .flagsChanged else {
+            if event.type == .keyDown { onKeyDown(event.keyCode) }
             cancelIfHeld()
             return
         }

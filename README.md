@@ -23,6 +23,8 @@ The build script signs the app with your Apple Development certificate when you 
 
 Hold Option, talk, and release. A small pill at the bottom of the screen shows the frequencies in your voice while you hold the key, with low pitches on the left and high on the right. Each bar jumps up with sound in its range and fades when the sound stops. Then a spinner shows while Logos transcribes and cleans up. Taps shorter than `minHoldSeconds` are ignored. Pressing any other key or clicking while you hold Option cancels the recording, so Option shortcuts and Option-typed characters keep working.
 
+When nothing focused takes text, for example the desktop or a button, Logos shows the dictation in a card instead of pasting it into nothing. Click **Copy**, or select part of the text, then press Esc or click **Close** to dismiss the card. Starting a new dictation also dismisses it. Logos asks macOS's Accessibility API what has keyboard focus, and when the API can't tell, Logos pastes as usual. If an app's text view isn't recognized and you get the card where you expected a paste, add the app's bundle ID to `alwaysPasteApps`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
+
 The menu bar icon has **Edit Prompt…**, **Edit Config…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
 
 ## Configure it
@@ -74,6 +76,8 @@ Other settings:
 - `minHoldSeconds` is the shortest hold that counts as a dictation (default `0.3`).
 - `trailingSpace` adds a space after each paste so dictations don't run together (default `true`).
 - `restoreClipboard` puts your previous clipboard back after pasting (default `true`).
+- `showWhenNoTextField` shows the dictation in a card to copy from when nothing focused takes text (default `true`). Set it to `false` to always paste.
+- `alwaysPasteApps` lists bundle IDs of apps that always get a paste, such as `["com.mitchellh.ghostty"]` (default empty).
 - `saveHistory` turns `history.jsonl` on or off (default `true`).
 
 ## The prompt

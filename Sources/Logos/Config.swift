@@ -52,6 +52,12 @@ struct Config: Codable {
     var trailingSpace = true
     /// Put the previous clipboard contents back after pasting.
     var restoreClipboard = true
+    /// When nothing focused takes text, show the dictation in a card to copy from
+    /// instead of pressing ⌘V into nothing.
+    var showWhenNoTextField = true
+    /// Bundle IDs of apps that always get a paste, for apps whose text views
+    /// Accessibility doesn't recognize, such as "com.mitchellh.ghostty".
+    var alwaysPasteApps: [String] = []
     /// Append raw and cleaned text to ~/.config/logos/history.jsonl.
     var saveHistory = true
 

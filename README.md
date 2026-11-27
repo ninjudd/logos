@@ -37,7 +37,13 @@ Hold Option, talk, and release. A small pill at the bottom of the screen shows t
 
 When nothing focused takes text, for example the desktop or a button, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, or select part of the text. Press Esc or click the X at the top right to dismiss the card. Starting a new dictation also dismisses it. Logos asks macOS's Accessibility API what has keyboard focus, and when the API can't tell, Logos pastes as usual. If an app's text view isn't recognized and you get the card where you expected a paste, add the app's bundle ID to `alwaysPasteApps`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
 
-The menu bar icon has **Edit Prompt…**, **Edit Dictionary…**, **Edit Config…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
+The menu bar icon has **Settings…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**. Settings has three tabs:
+
+- **Config** covers the hotkey, models, API keys, and other common settings.
+- **Prompt** edits the cleanup prompt.
+- **Dictionary** edits the dictionary.
+
+Changes save as you make them. A setting changed in the Config tab rewrites only that key in `config.json`, so settings you added by hand are kept.
 
 ## Configure it
 
@@ -45,7 +51,7 @@ Logos keeps four files in `~/.config/logos/`:
 
 - `config.json` holds settings and API keys. Logos creates it on first launch, readable only by you, and rereads it whenever it changes.
 - `prompt.md` is the cleanup prompt. Logos rereads it on every dictation.
-- `dictionary.txt` lists words and names to transcribe and spell exactly, one per line, such as people's names, product names, and jargon. Lines starting with `#` are ignored. Logos rereads it on every dictation and gives it to the transcription model and to the cleanup prompt; see below for how each uses it.
+- `dictionary.txt` lists words and names to transcribe and spell exactly, one per line, such as people's names, product names, and jargon. Lines starting with `#` are ignored. An entry sets the spelling, not the capitalization: the cleanup model chooses letter case from context. To say how, add a note after `: `, such as `logos: "Logos" for the app or project, "logos" for the command`. Logos rereads it on every dictation and gives it to the transcription model and to the cleanup prompt; see below for how each uses it.
 - `history.jsonl` logs each dictation's raw transcript, cleaned text, models, and timings. Comparing raw and cleaned text here is the quickest way to tune the prompt.
 
 You name each model as `provider/model`, and put each provider's key under `keys`:

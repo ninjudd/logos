@@ -6,6 +6,7 @@ import ServiceManagement
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let overlay = OverlayController()
     private let hotkey = HotkeyMonitor()
+    private let settings = SettingsWindowController()
     private var statusItem: NSStatusItem!
 
     private var recorder: Recorder?
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
+        NSApp.mainMenu = Self.mainMenu()
 
         hotkey.hotkey = { ConfigStore.shared.current.hotkey }
         hotkey.onPress = { [weak self] in MainActor.assumeIsolated { self?.startRecording() } }
@@ -279,9 +281,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item("Grant Accessibility Access…", #selector(openAccessibility)))
         }
         menu.addItem(.separator())
-        menu.addItem(item("Edit Prompt…", #selector(editPrompt)))
-        menu.addItem(item("Edit Dictionary…", #selector(editDictionary)))
-        menu.addItem(item("Edit Config…", #selector(editConfig)))
+        let settingsItem = item("Settings…", #selector(openSettings))
+        settingsItem.keyEquivalent = ","
+        menu.addItem(settingsItem)
         menu.addItem(item("Open History", #selector(openHistory)))
         let copy = item("Copy Last Dictation", #selector(copyLast))
         copy.isEnabled = lastText != nil
@@ -299,9 +301,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    @objc private func editPrompt() { NSWorkspace.shared.open(Paths.prompt) }
-    @objc private func editDictionary() { NSWorkspace.shared.open(Paths.dictionary) }
-    @objc private func editConfig() { NSWorkspace.shared.open(Paths.config) }
+    @objc private func openSettings() { settings.show() }
+
+    /// Logos shows no menu bar, but text fields take ⌘C, ⌘V, ⌘A, and ⌘Z only
+    /// from menu items, so the Settings window needs an Edit menu to exist.
+    private static func mainMenu() -> NSMenu {
+        let main = NSMenu()
+        let app = NSMenu()
+        app.addItem(NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        app.addItem(NSMenuItem(title: "Quit Logos", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+        let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(redo)
+        edit.addItem(.separator())
+        edit.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        edit.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        edit.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        edit.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+        for submenu in [app, edit] {
+            let holder = NSMenuItem()
+            holder.submenu = submenu
+            main.addItem(holder)
+        }
+        return main
+    }
 
     @objc private func openHistory() {
         if !FileManager.default.fileExists(atPath: Paths.history.path) {

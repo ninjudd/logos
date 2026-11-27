@@ -7,7 +7,7 @@ enum Cleaner {
         "claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5",
     ]
 
-    static func clean(_ transcript: String, prompt: String, app: String, vocabulary: [String],
+    static func clean(_ transcript: String, prompt: String, app: String, vocabulary: [Vocabulary.Entry],
                       config: Config) async throws -> String {
         let (system, user) = messages(prompt: prompt, transcript: transcript, app: app, vocabulary: vocabulary)
         let model = try config.resolve(config.cleanup.model)
@@ -23,7 +23,7 @@ enum Cleaner {
     /// transcript is the user message. {{app}} and {{dictionary}} are filled in
     /// first, so the transcript's own text is never substituted.
     static func messages(prompt: String, transcript: String, app: String,
-                         vocabulary: [String] = []) -> (system: String?, user: String) {
+                         vocabulary: [Vocabulary.Entry] = []) -> (system: String?, user: String) {
         let rendered = prompt
             .replacingOccurrences(of: "{{app}}", with: app)
             .replacingOccurrences(of: "{{dictionary}}", with: Vocabulary.promptList(vocabulary))

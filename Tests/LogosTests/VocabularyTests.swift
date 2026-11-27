@@ -3,18 +3,41 @@ import Testing
 @testable import Logos
 
 @Suite struct VocabularyTests {
+    private typealias Entry = Vocabulary.Entry
+
     // Catches comment lines, blank lines, or stray spaces reaching the models.
-    @Test func parseSkipsCommentsBlanksAndDuplicates() {
-        let text = "# names\nLogos\n\n  Ghostty  \n# Old\nLogos\nNinjudd\n"
-        #expect(Vocabulary.parse(text) == ["Logos", "Ghostty", "Ninjudd"])
+    @Test func parseSkipsCommentsAndBlanks() {
+        let text = "# names\nLogos\n\n  Ghostty  \n# Old\nNinjudd\n"
+        #expect(Vocabulary.parse(text).map(\.term) == ["Logos", "Ghostty", "Ninjudd"])
     }
 
-    @Test func defaultFileHoldsOneWord() {
-        #expect(Vocabulary.parse(Vocabulary.defaultText) == ["Logos"])
+    // Catches "Logos" and "logos" both being listed, which would tell the model
+    // two different spellings of one word.
+    @Test func duplicatesInAnyCaseKeepTheFirst() {
+        #expect(Vocabulary.parse("logos\nLogos\nLOGOS\n") == [Entry(term: "logos")])
     }
 
-    @Test func promptListIsBulleted() {
-        #expect(Vocabulary.promptList(["Logos", "Ghostty"]) == "- Logos\n- Ghostty")
+    @Test func noteFollowsColonSpace() {
+        #expect(Vocabulary.parse("logos: \"Logos\" for the app, \"logos\" for the command") ==
+            [Entry(term: "logos", note: "\"Logos\" for the app, \"logos\" for the command")])
+        #expect(Vocabulary.parse("ratio: 3: 2 in photos") == [Entry(term: "ratio", note: "3: 2 in photos")])
+    }
+
+    // Catches splitting on any colon, which would break terms such as std::vector.
+    @Test func colonWithoutASpaceStaysInTheTerm() {
+        #expect(Vocabulary.parse("std::vector\nhttps://logosvoice.dev") ==
+            [Entry(term: "std::vector"), Entry(term: "https://logosvoice.dev")])
+    }
+
+    @Test func defaultFileExplainsCaseWithANote() {
+        let entries = Vocabulary.parse(Vocabulary.defaultText)
+        #expect(entries.map(\.term) == ["logos"])
+        #expect(entries.first?.note?.contains("command") == true)
+    }
+
+    @Test func promptListIncludesNotes() {
+        #expect(Vocabulary.promptList([Entry(term: "logos", note: "\"Logos\" for the app"), Entry(term: "Ghostty")])
+            == "- logos: \"Logos\" for the app\n- Ghostty")
         #expect(Vocabulary.promptList([]) == "(none)")
     }
 
@@ -28,21 +51,22 @@ import Testing
 
     @Test func promptGetsTheDictionary() {
         let (system, _) = Cleaner.messages(prompt: "Spell these:\n{{dictionary}}", transcript: "hi", app: "Mail",
-                                           vocabulary: ["Logos", "Ghostty"])
+                                           vocabulary: [Entry(term: "Logos"), Entry(term: "Ghostty")])
         #expect(system == "Spell these:\n- Logos\n- Ghostty")
     }
 
     // Catches dictating the literal word "{{dictionary}}" being replaced with the list.
     @Test func placeholderInTheTranscriptIsLeftAlone() {
         let (_, user) = Cleaner.messages(prompt: "{{transcript}}", transcript: "say {{dictionary}}", app: "Mail",
-                                         vocabulary: ["Logos"])
+                                         vocabulary: [Entry(term: "Logos")])
         #expect(user == "say {{dictionary}}")
     }
 
-    // Catches the default prompt losing the placeholder, which would leave new
-    // installs' cleanup model without the dictionary.
-    @Test func defaultPromptUsesTheDictionary() {
+    // Catches the default prompt losing the placeholder or the rule that context
+    // sets letter case.
+    @Test func defaultPromptUsesTheDictionaryAndContextualCase() {
         #expect(DefaultPrompt.text.contains("{{dictionary}}"))
+        #expect(DefaultPrompt.text.contains("letter case from context"))
     }
 
     @Test func appleModelNames() {
@@ -51,4 +75,8 @@ import Testing
         #expect(Transcriber.AppleModel("apple/dictation") == .dictation)
         #expect(Transcriber.AppleModel("openai/gpt-4o-transcribe") == nil)
     }
+}
+
+extension Vocabulary.Entry {
+    init(term: String) { self.init(term: term, note: nil) }
 }

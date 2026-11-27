@@ -129,7 +129,7 @@ final class ConfigStore {
     }
 
     /// Words and names to transcribe and spell exactly, read fresh each time.
-    var dictionary: [String] {
+    var dictionary: [Vocabulary.Entry] {
         Vocabulary.parse((try? String(contentsOf: Paths.dictionary, encoding: .utf8)) ?? "")
     }
 
@@ -254,7 +254,7 @@ enum DefaultPrompt {
     - In a terminal or code editor, keep commands, file names, and identifiers exact.
     - If the transcript is empty or only filler, output nothing.
 
-    Spell these words and names exactly as written here:
+    Spell these words and names as written here. Choose their letter case from context: capitalize a name, product, or project, and keep a command, file name, or identifier as it's typed. Follow any note after a word.
     {{dictionary}}
 
     """
@@ -263,24 +263,42 @@ enum DefaultPrompt {
 /// The words in dictionary.txt, which Logos gives the transcription model to
 /// listen for and the cleanup prompt as {{dictionary}}.
 enum Vocabulary {
+    /// A word or name to transcribe and spell exactly. Its letter case follows
+    /// context, and `note` says how when context alone isn't enough.
+    struct Entry: Equatable {
+        var term: String
+        var note: String?
+    }
+
     static let defaultText = """
     # Words and names for Logos to transcribe and spell exactly, one per line.
+    # Letter case follows context. To say how, add a note after ": ".
     # Lines starting with # are ignored.
-    Logos
+    logos: "Logos" for the app or project, "logos" for the command
 
     """
 
-    /// One entry per non-empty line, trimmed, skipping # comments and duplicates.
-    static func parse(_ text: String) -> [String] {
+    /// One entry per non-empty line, skipping # comments and words already
+    /// listed in any case. A line splits into word and note at its first ": ".
+    static func parse(_ text: String) -> [Entry] {
         var seen = Set<String>()
-        return text.split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("#") && seen.insert($0).inserted }
+        return text.split(whereSeparator: \.isNewline).compactMap { line in
+            let line = line.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#") else { return nil }
+            let parts = line.components(separatedBy: ": ")
+            let term = parts[0].trimmingCharacters(in: .whitespaces)
+            let note = parts.dropFirst().joined(separator: ": ").trimmingCharacters(in: .whitespaces)
+            guard !term.isEmpty, seen.insert(term.lowercased()).inserted else { return nil }
+            return Entry(term: term, note: note.isEmpty ? nil : note)
+        }
     }
 
-    /// The list as it appears in the cleanup prompt.
-    static func promptList(_ words: [String]) -> String {
-        words.isEmpty ? "(none)" : words.map { "- \($0)" }.joined(separator: "\n")
+    /// The list as it appears in the cleanup prompt, notes included.
+    static func promptList(_ entries: [Entry]) -> String {
+        guard !entries.isEmpty else { return "(none)" }
+        return entries.map { entry in
+            entry.note.map { "- \(entry.term): \($0)" } ?? "- \(entry.term)"
+        }.joined(separator: "\n")
     }
 
     /// A transcription API's `prompt`: your own hint, then the words to listen for.

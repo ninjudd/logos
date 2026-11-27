@@ -4,7 +4,9 @@ import Speech
 
 enum Transcriber {
     /// Transcribes `audio`, listening especially for the words in `vocabulary`.
-    static func transcribe(_ audio: URL, config: Config, vocabulary: [String]) async throws -> String {
+    /// Transcription models get only the words; their notes are for cleanup.
+    static func transcribe(_ audio: URL, config: Config, vocabulary entries: [Vocabulary.Entry]) async throws -> String {
+        let vocabulary = entries.map(\.term)
         let settings = config.transcription
         if let apple = AppleModel(settings.model) {
             return try await apple.transcribe(audio, localeID: settings.locale, vocabulary: vocabulary)

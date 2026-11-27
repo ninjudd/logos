@@ -177,14 +177,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Stops `recorder` on the audio queue and waits, so its file is complete.
-    private func stop(_ recorder: Recorder) async {
-        let queue = audioQueue
-        await withCheckedContinuation { continuation in
-            queue.async {
-                recorder.stop()
-                continuation.resume()
-            }
+    /// Returns false when the stop takes more than 3 seconds. Its thread may stay
+    /// stuck, so later recordings use a fresh one.
+    private func stop(_ recorder: Recorder) async -> Bool {
+        guard await audioQueue.run(within: 3, { recorder.stop() }) else {
+            audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+            NSLog("Logos: the microphone took more than 3 seconds to stop; dropped the dictation")
+            return false
         }
+        return true
     }
 
     private func tick() {
@@ -240,18 +241,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshOverlay()
 
         chain = Task { @MainActor [weak self] in
-            await self?.stop(r)
+            let stopped = await self?.stop(r) ?? false
             let result: Result<Pipeline.Outcome, Error>
-            do {
-                result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,
-                                                         vocabulary: vocabulary, app: app, context: context) { stage in
-                    Task { @MainActor in
-                        self?.stageLabel = stage
-                        self?.refreshOverlay()
-                    }
-                })
-            } catch {
-                result = .failure(error)
+            if stopped {
+                do {
+                    result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,
+                                                             vocabulary: vocabulary, app: app, context: context) { stage in
+                        Task { @MainActor in
+                            self?.stageLabel = stage
+                            self?.refreshOverlay()
+                        }
+                    })
+                } catch {
+                    result = .failure(error)
+                }
+            } else {
+                // The file may be incomplete, so it isn't worth transcribing.
+                result = .failure(LogosError("The microphone didn't stop in time, so that dictation was dropped. Try again."))
             }
             try? FileManager.default.removeItem(at: audio)
             await previous?.value

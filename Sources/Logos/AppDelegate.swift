@@ -163,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let audio = r.url
         let prompt = ConfigStore.shared.prompt
+        let vocabulary = ConfigStore.shared.dictionary
         let app = targetApp
         let previous = chain
         pending += 1
@@ -172,7 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         chain = Task { @MainActor [weak self] in
             let result: Result<Pipeline.Outcome, Error>
             do {
-                result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt, app: app) { stage in
+                result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,
+                                                         vocabulary: vocabulary, app: app) { stage in
                     Task { @MainActor in
                         self?.stageLabel = stage
                         self?.refreshOverlay()
@@ -278,6 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(item("Edit Prompt…", #selector(editPrompt)))
+        menu.addItem(item("Edit Dictionary…", #selector(editDictionary)))
         menu.addItem(item("Edit Config…", #selector(editConfig)))
         menu.addItem(item("Open History", #selector(openHistory)))
         let copy = item("Copy Last Dictation", #selector(copyLast))
@@ -297,6 +300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func editPrompt() { NSWorkspace.shared.open(Paths.prompt) }
+    @objc private func editDictionary() { NSWorkspace.shared.open(Paths.dictionary) }
     @objc private func editConfig() { NSWorkspace.shared.open(Paths.config) }
 
     @objc private func openHistory() {

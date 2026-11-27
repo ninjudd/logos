@@ -7,8 +7,9 @@ enum Cleaner {
         "claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5",
     ]
 
-    static func clean(_ transcript: String, prompt: String, app: String, config: Config) async throws -> String {
-        let (system, user) = messages(prompt: prompt, transcript: transcript, app: app)
+    static func clean(_ transcript: String, prompt: String, app: String, vocabulary: [String],
+                      config: Config) async throws -> String {
+        let (system, user) = messages(prompt: prompt, transcript: transcript, app: app, vocabulary: vocabulary)
         let model = try config.resolve(config.cleanup.model)
         switch model.api {
         case "anthropic": return try await anthropic(system: system, user: user, model: model, settings: config.cleanup)
@@ -19,9 +20,13 @@ enum Cleaner {
 
     /// A prompt with {{transcript}} is sent whole as the user message, with no
     /// system prompt. Otherwise the prompt is the system prompt and the
-    /// transcript is the user message.
-    static func messages(prompt: String, transcript: String, app: String) -> (system: String?, user: String) {
-        let rendered = prompt.replacingOccurrences(of: "{{app}}", with: app)
+    /// transcript is the user message. {{app}} and {{dictionary}} are filled in
+    /// first, so the transcript's own text is never substituted.
+    static func messages(prompt: String, transcript: String, app: String,
+                         vocabulary: [String] = []) -> (system: String?, user: String) {
+        let rendered = prompt
+            .replacingOccurrences(of: "{{app}}", with: app)
+            .replacingOccurrences(of: "{{dictionary}}", with: Vocabulary.promptList(vocabulary))
         if rendered.contains("{{transcript}}") {
             return (nil, rendered.replacingOccurrences(of: "{{transcript}}", with: transcript))
         }

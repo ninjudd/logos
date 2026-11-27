@@ -37,14 +37,15 @@ Hold Option, talk, and release. A small pill at the bottom of the screen shows t
 
 When nothing focused takes text, for example the desktop or a button, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, or select part of the text. Press Esc or click the X at the top right to dismiss the card. Starting a new dictation also dismisses it. Logos asks macOS's Accessibility API what has keyboard focus, and when the API can't tell, Logos pastes as usual. If an app's text view isn't recognized and you get the card where you expected a paste, add the app's bundle ID to `alwaysPasteApps`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
 
-The menu bar icon has **Edit Prompt…**, **Edit Config…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
+The menu bar icon has **Edit Prompt…**, **Edit Dictionary…**, **Edit Config…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
 
 ## Configure it
 
-Logos keeps three files in `~/.config/logos/`:
+Logos keeps four files in `~/.config/logos/`:
 
 - `config.json` holds settings and API keys. Logos creates it on first launch, readable only by you, and rereads it whenever it changes.
 - `prompt.md` is the cleanup prompt. Logos rereads it on every dictation.
+- `dictionary.txt` lists words and names to transcribe and spell exactly, one per line, such as people's names, product names, and jargon. Lines starting with `#` are ignored. Logos rereads it on every dictation and gives it to the transcription model and to the cleanup prompt; see below for how each uses it.
 - `history.jsonl` logs each dictation's raw transcript, cleaned text, models, and timings. Comparing raw and cleaned text here is the quickest way to tune the prompt.
 
 You name each model as `provider/model`, and put each provider's key under `keys`:
@@ -61,8 +62,9 @@ You can leave out any setting you don't change. A key you leave empty falls back
 
 Transcription models:
 
-- `apple` runs on your Mac with Apple's speech model. It needs no key and is the default. The first dictation downloads the model for your `locale`.
-- `openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`, `groq/whisper-large-v3-turbo`, or any other model behind an OpenAI-compatible `/audio/transcriptions` endpoint. `transcription.prompt` passes those models a vocabulary hint.
+- `apple` runs on your Mac with Apple's newer speech model. It needs no key and is the default. The first dictation downloads the model for your `locale`. This model ignores `dictionary.txt`.
+- `apple/dictation` runs on your Mac with the model behind macOS keyboard dictation, and listens for the words in `dictionary.txt`. Compare the two on your own voice with the `raw` text in `history.jsonl`.
+- `openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`, `groq/whisper-large-v3-turbo`, or any other model behind an OpenAI-compatible `/audio/transcriptions` endpoint. Logos sends these models `transcription.prompt` followed by the words in `dictionary.txt` as a hint.
 
 Cleanup models:
 
@@ -94,7 +96,7 @@ Other settings:
 
 ## The prompt
 
-`prompt.md` is sent as the system prompt, and the transcript follows as the user message inside `<transcript>` tags. `{{app}}` in the prompt becomes the name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. If the prompt contains `{{transcript}}`, Logos sends the whole prompt as the user message with the transcript in that spot, and no system prompt.
+`prompt.md` is sent as the system prompt, and the transcript follows as the user message inside `<transcript>` tags. `{{app}}` in the prompt becomes the name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. `{{dictionary}}` becomes the words in `dictionary.txt` as a bulleted list, or `(none)`. The default prompt asks the model to spell those words exactly, which also fixes mishearings the transcription model makes. If your prompt leaves `{{dictionary}}` out, the cleanup model doesn't see the dictionary. If the prompt contains `{{transcript}}`, Logos sends the whole prompt as the user message with the transcript in that spot, and no system prompt.
 
 ## The logos command
 

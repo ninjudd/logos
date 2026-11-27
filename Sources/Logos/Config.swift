@@ -101,6 +101,7 @@ enum Paths {
         ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: ".config/logos")
     static let config = dir.appending(path: "config.json")
     static let prompt = dir.appending(path: "prompt.md")
+    static let dictionary = dir.appending(path: "dictionary.txt")
     static let history = dir.appending(path: "history.jsonl")
     static let updateLog = dir.appending(path: "update.log")
 }
@@ -127,6 +128,11 @@ final class ConfigStore {
         (try? String(contentsOf: Paths.prompt, encoding: .utf8)) ?? DefaultPrompt.text
     }
 
+    /// Words and names to transcribe and spell exactly, read fresh each time.
+    var dictionary: [String] {
+        Vocabulary.parse((try? String(contentsOf: Paths.dictionary, encoding: .utf8)) ?? "")
+    }
+
     func ensureFiles() {
         let fm = FileManager.default
         try? fm.createDirectory(at: Paths.dir, withIntermediateDirectories: true)
@@ -141,6 +147,9 @@ final class ConfigStore {
         }
         if !fm.fileExists(atPath: Paths.prompt.path) {
             try? DefaultPrompt.text.write(to: Paths.prompt, atomically: true, encoding: .utf8)
+        }
+        if !fm.fileExists(atPath: Paths.dictionary.path) {
+            try? Vocabulary.defaultText.write(to: Paths.dictionary, atomically: true, encoding: .utf8)
         }
     }
 
@@ -245,8 +254,38 @@ enum DefaultPrompt {
     - In a terminal or code editor, keep commands, file names, and identifiers exact.
     - If the transcript is empty or only filler, output nothing.
 
-    Spell these words exactly as written here:
-    - Logos
+    Spell these words and names exactly as written here:
+    {{dictionary}}
 
     """
+}
+
+/// The words in dictionary.txt, which Logos gives the transcription model to
+/// listen for and the cleanup prompt as {{dictionary}}.
+enum Vocabulary {
+    static let defaultText = """
+    # Words and names for Logos to transcribe and spell exactly, one per line.
+    # Lines starting with # are ignored.
+    Logos
+
+    """
+
+    /// One entry per non-empty line, trimmed, skipping # comments and duplicates.
+    static func parse(_ text: String) -> [String] {
+        var seen = Set<String>()
+        return text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("#") && seen.insert($0).inserted }
+    }
+
+    /// The list as it appears in the cleanup prompt.
+    static func promptList(_ words: [String]) -> String {
+        words.isEmpty ? "(none)" : words.map { "- \($0)" }.joined(separator: "\n")
+    }
+
+    /// A transcription API's `prompt`: your own hint, then the words to listen for.
+    static func transcriptionHint(_ prompt: String, words: [String]) -> String {
+        let vocabulary = words.isEmpty ? "" : "Vocabulary: \(words.joined(separator: ", "))."
+        return [prompt, vocabulary].filter { !$0.isEmpty }.joined(separator: " ")
+    }
 }

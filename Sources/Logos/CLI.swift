@@ -117,7 +117,8 @@ enum CLI {
         let status: Int32
         do {
             let outcome = try await Pipeline.run(audio: URL(fileURLWithPath: file), config: config,
-                                                 prompt: ConfigStore.shared.prompt, app: app) {
+                                                 prompt: ConfigStore.shared.prompt,
+                                                 vocabulary: ConfigStore.shared.dictionary, app: app) {
                 fputs("\($0)\n", stderr)
             }
             print("raw:   \(outcome.raw)")

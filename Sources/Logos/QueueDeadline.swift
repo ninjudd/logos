@@ -7,7 +7,7 @@ extension DispatchQueue {
     func run(within seconds: TimeInterval, _ work: @escaping @Sendable () -> Void) async -> Bool {
         let once = Once()
         return await withCheckedContinuation { continuation in
-            async {
+            self.async {
                 work()
                 if once.claim() { continuation.resume(returning: true) }
             }

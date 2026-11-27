@@ -70,14 +70,46 @@ enum Updater {
         return process
     }
 
-    // MARK: Daily check
+    // MARK: Checks
+
+    /// What a check that you ask for found: a newer release to offer, the
+    /// newest release when it's no newer than this copy, or why it failed.
+    enum CheckResult: Equatable {
+        case newer(String)
+        case upToDate(latest: String)
+        case failed(String)
+    }
+
+    /// Asks GitHub for the newest release now, whatever the cache holds, for
+    /// Check for Updates… in the menu. Saves the answer to the cache, so the
+    /// automatic check starts from it. Runs even when LOGOS_OFFLINE is set,
+    /// because you asked for it.
+    static func check(installed: String = installedVersion, cache: URL = cacheFile,
+                      fetch: () async throws -> String = latestTag) async -> CheckResult {
+        do {
+            let tag = try await fetch()
+            save(Check(tag: tag, checked: Date()), to: cache)
+            return isNewer(tag, than: installed) ? .newer(tag) : .upToDate(latest: tag)
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    /// The tag of a release newer than `installed`, found the way Logos looks on
+    /// its own: through the daily cache, and not at all when `enabled`, the
+    /// checkForUpdates setting, is false.
+    static func automaticCheck(enabled: Bool, installed: String = installedVersion,
+                               latest: () async -> String? = { await latestTagCached() }) async -> String? {
+        guard enabled, let tag = await latest(), isNewer(tag, than: installed) else { return nil }
+        return tag
+    }
 
     private struct Check: Codable {
         var tag: String
         var checked: Date
     }
 
-    private static var cacheFile: URL {
+    static var cacheFile: URL {
         let base = ProcessInfo.processInfo.environment["XDG_CACHE_HOME"].map { URL(fileURLWithPath: $0) }
             ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: ".cache")
         return base.appending(path: "logos/release.json")
@@ -85,23 +117,27 @@ enum Updater {
 
     /// The newest release's tag, asking GitHub at most once a day. Nil when
     /// offline, when LOGOS_OFFLINE is set, or when GitHub can't be reached.
-    static func latestTagCached(maxAge: TimeInterval = 86_400) async -> String? {
+    static func latestTagCached(maxAge: TimeInterval = 86_400, cache: URL = cacheFile,
+                                fetch: () async throws -> String = latestTag) async -> String? {
         guard ProcessInfo.processInfo.environment["LOGOS_OFFLINE"] == nil else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        if let data = try? Data(contentsOf: cacheFile),
+        if let data = try? Data(contentsOf: cache),
            let check = try? decoder.decode(Check.self, from: data),
            Date().timeIntervalSince(check.checked) < maxAge {
             return check.tag
         }
-        guard let tag = try? await latestTag() else { return nil }
+        guard let tag = try? await fetch() else { return nil }
+        save(Check(tag: tag, checked: Date()), to: cache)
+        return tag
+    }
+
+    private static func save(_ check: Check, to cache: URL) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        if let data = try? encoder.encode(Check(tag: tag, checked: Date())) {
-            try? FileManager.default.createDirectory(at: cacheFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: cacheFile, options: .atomic)
-        }
-        return tag
+        guard let data = try? encoder.encode(check) else { return }
+        try? FileManager.default.createDirectory(at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: cache, options: .atomic)
     }
 
     // MARK: GitHub access

@@ -167,6 +167,13 @@ private struct ConfigTab: View {
                 TextField("Most tokens in a reply", value: model.binding(\.cleanup.maxTokens, ["cleanup", "maxTokens"]),
                           format: .number)
             }
+            Section("Updates") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Check for updates automatically", isOn: model.binding(\.checkForUpdates, ["checkForUpdates"]))
+                    Text("Logos asks GitHub for the newest release at most once a day. Check for Updates… in the menu works either way.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Section("API keys") {
                 ForEach(providers, id: \.self) { provider in
                     SecureField(provider, text: model.key(provider))
@@ -372,6 +379,11 @@ final class SettingsWindowController {
         model.setRecording = { hotkey.isSuspended = $0 }
     }
     private var window: NSWindow?
+
+    /// Shows a setting that changed outside the window, such as from the menu.
+    func refresh<T>(_ keyPath: WritableKeyPath<Config, T>) {
+        model.config[keyPath: keyPath] = ConfigStore.shared.current[keyPath: keyPath]
+    }
 
     func show() {
         model.reload()

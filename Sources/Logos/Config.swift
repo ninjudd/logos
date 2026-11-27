@@ -68,6 +68,10 @@ struct Config: Codable {
     var readCursorContext = true
     /// Append raw and cleaned text to ~/.config/logos/history.jsonl.
     var saveHistory = true
+    /// Look for a new release when the app starts, every hour, and when `logos
+    /// transcribe` runs, asking GitHub at most once a day. Check for Updates… in
+    /// the menu works either way.
+    var checkForUpdates = true
 
     static let builtInProviders: [String: Provider] = [
         "anthropic": Provider(api: "anthropic", baseURL: "https://api.anthropic.com/v1"),

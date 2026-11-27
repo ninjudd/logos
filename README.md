@@ -118,7 +118,7 @@ Hold the hotkey, talk, and let go.
 - **A hold with nothing said** shows "No speech detected" and pastes nothing. Logos measures how loud each recording is before it transcribes it, and a recording quieter than `silenceThresholdDB` goes to no model. Given silence, Whisper models can answer with made-up text, often a word from your dictionary.
 - **A quick tap** shorter than `minHoldSeconds` is ignored. Pressing another key or clicking while you hold a modifier hotkey cancels the recording, so the modifier's shortcuts keep working.
 - **With no text field focused**, such as on the desktop, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, and press Esc or click the X to dismiss the card.
-- **The menu bar icon** has **Settings…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
+- **The menu bar icon** has **Settings…**, **Open History**, **Copy Last Dictation**, **Check for Updates…**, **Check for Updates Automatically**, and **Launch at Login**.
 
 ## Update
 
@@ -126,7 +126,11 @@ Hold the hotkey, talk, and let go.
 logos update
 ```
 
-This builds and installs the newest release, then restarts the app. Logos checks for releases at most once a day. When one is out, the menu bar menu shows **Update to vX.Y.Z…**, which does the same thing. `logos update --check` only reports whether there is one.
+This builds and installs the newest release, then restarts the app. `logos update --check` only reports whether there is one.
+
+To check from the app, choose **Check for Updates…** from the menu bar icon. Logos asks GitHub at once and answers in a dialog. It offers to install a newer release, says that your version is the latest, or shows why the check failed. **Install** does what `logos update` does.
+
+Logos also checks on its own, at launch and every hour, and asks GitHub at most once a day. When it finds a newer release, the menu shows **Update to vX.Y.Z…**, and `logos transcribe` warns that you're behind. To stop these checks, turn off **Check for Updates Automatically** in the menu, or **Check for updates automatically** in **Settings… → Config**. Both set `checkForUpdates` in `config.json`. Logos reads the setting at each hourly check, so the change needs no restart. **Check for Updates…** works either way.
 
 ## Troubleshooting
 
@@ -183,6 +187,7 @@ A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variabl
 | `alwaysPasteApps` | empty | Bundle IDs of apps that always get a paste. |
 | `readCursorContext` | `true` | Send the text around the cursor, the field's placeholder, the window title, and a browser's page URL to the cleanup model. Password fields are never read, and speech models never see any of it. |
 | `saveHistory` | `true` | Keep `history.jsonl`. |
+| `checkForUpdates` | `true` | Look for a new release when the app starts, every hour, and when `logos transcribe` runs, asking GitHub at most once a day. **Check for Updates…** in the menu works either way. |
 
 To add a provider, give it a name, an API style, and a base URL. `api` is `anthropic` for the Anthropic Messages API, or `openai` for anything OpenAI-compatible:
 
@@ -234,7 +239,7 @@ Name the file after your tool, such as `projector.json`, and write it atomically
 - **`logos update`** builds and installs the newest release. `--check` only reports whether one is out.
 - **`logos version`** prints the installed version.
 
-Set `LOGOS_OFFLINE` to any value to stop the daily check for a new release. With it set, the waveform menu shows no **Update to** item, and `logos transcribe` never warns that a newer release is out. It doesn't affect `logos update`, which always asks GitHub for the newest release.
+Set `LOGOS_OFFLINE` to any value to stop the daily check for a new release. With it set, the waveform menu shows no **Update to** item, and `logos transcribe` never warns that a newer release is out. It doesn't affect `logos update` or **Check for Updates…**, which always ask GitHub for the newest release. Turning off `checkForUpdates` stops the same checks, in both the app and the `logos` command, with no environment variable.
 
 The app sees `LOGOS_OFFLINE` only when launchd passes it on, because an app that Finder or `open` starts doesn't get your shell's environment. Set it for launchd, then quit and reopen Logos:
 

@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Starts and stops the microphone off the main thread. Core Audio can stall
     /// while devices change, such as when a display or audio interface connects,
     /// and Logos must stay responsive when it does.
-    private var audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+    private var audioQueue = AppDelegate.makeAudioQueue()
     private var microphone = MicrophoneStart()
     private var pressedAt = Date()
     private var targetApp = ""
@@ -166,10 +166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// stuck, so later recordings use a fresh one.
     private func microphoneTimedOut(_ id: Int) {
         guard microphone.timedOut(id) else { return }
-        audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+        audioQueue = Self.makeAudioQueue()
         _ = endRecording()
         overlay.flash("The microphone didn't respond. Try again, or choose another microphone in Settings.")
         NSLog("Logos: the microphone took more than 3 seconds to start; abandoned it")
+    }
+
+    /// Every audio queue Logos uses, including the fresh one after a stall, carries
+    /// the same label, so they read as one queue in a debugger or crash log.
+    private nonisolated static func makeAudioQueue() -> DispatchQueue {
+        DispatchQueue(label: "com.ninjudd.logos.audio")
     }
 
     private func discard(_ recorder: Recorder) {
@@ -181,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// stuck, so later recordings use a fresh one.
     private func stop(_ recorder: Recorder) async -> Bool {
         guard await audioQueue.run(within: 3, { recorder.stop() }) else {
-            audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+            audioQueue = Self.makeAudioQueue()
             NSLog("Logos: the microphone took more than 3 seconds to stop; dropped the dictation")
             return false
         }

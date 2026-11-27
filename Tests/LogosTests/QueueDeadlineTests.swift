@@ -12,8 +12,8 @@ import Testing
         try await Task.sleep(for: .milliseconds(400))
     }
 
-    // Catches a wait that lasts as long as the work, which left a stalled stop holding
-    // every later dictation, and the late finish resuming the wait a second time.
+    // Catches a wait that lasts as long as the work, which would hold every later
+    // dictation behind a stalled stop, and the late finish resuming the wait a second time.
     @Test func workThatOverrunsIsAbandoned() async {
         let queue = DispatchQueue(label: "test")
         let stuck = DispatchSemaphore(value: 0)

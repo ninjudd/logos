@@ -16,6 +16,11 @@ enum Pipeline {
         stage("Transcribing…")
         let raw = try await Transcriber.transcribe(audio, config: config, vocabulary: vocabulary)
         let transcribed = Date()
+        var context = context
+        if config.useContacts,
+           let hint = People.hint(for: People.mentioned(in: raw, among: ContactsIndex.shared.people)) {
+            context.hints.append(hint)
+        }
 
         var outcome = Outcome(raw: raw, text: raw)
         if raw.isEmpty {

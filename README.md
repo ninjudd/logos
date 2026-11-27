@@ -90,6 +90,12 @@ logos: "Logos" for the app or project, "logos" for the command
 
 An entry sets the spelling, not the capitalization: the cleanup model picks the letter case from context. To say how, add a note after `: `, as in the last line. Lines that start with `#` are ignored. Every model except `apple` listens for these words, and the cleanup model spells them as written.
 
+## Use your contacts
+
+Logos can spell the people you mention the way your contacts list them, and fill in their email addresses when you ask, as in "send it to Jon's email". In **Settings… → Config**, turn on **Use my contacts for names and email addresses** and allow Contacts access when macOS asks.
+
+Logos reads your contacts on your Mac and keeps up with them, so a contact you add or change works on your next dictation. It matches each transcript against them there. Only the people the transcript seems to mention, at most five, go to the cleanup model, with their email addresses. A name counts when the transcript capitalizes it, as speech models do for names, or when both a first name and a last name match. Short forms and near misses count too, such as "Jon" for Jonathan or "Grub" for Grubb.
+
 ## Tune the prompt
 
 **Settings… → Prompt** holds the cleanup prompt, which Logos sends to the cleanup model with every dictation. Change it to match how you write: keep your own punctuation habits, format lists a certain way, or leave your phrasing alone. Logos rereads it on every dictation. The [prompt reference](#prompt-reference) lists the placeholders it can use.
@@ -177,6 +183,7 @@ A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variabl
 | `showWhenNoTextField` | `true` | Show a card to copy from when nothing focused takes text. |
 | `alwaysPasteApps` | empty | Bundle IDs of apps that always get a paste. |
 | `readCursorContext` | `true` | Send the text around the cursor, the field's placeholder, the window title, and a browser's page URL to the cleanup model. Password fields are never read, and speech models never see any of it. |
+| `useContacts` | `false` | Match each transcript against your contacts, and send the people it mentions, with their email addresses, to the cleanup model. |
 | `saveHistory` | `true` | Keep `history.jsonl`. |
 
 To add a provider, give it a name, an API style, and a base URL. `api` is `anthropic` for the Anthropic Messages API, or `openai` for anything OpenAI-compatible:

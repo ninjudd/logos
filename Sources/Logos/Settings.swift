@@ -157,6 +157,7 @@ private struct ConfigTab: View {
                 Toggle("Clean up transcripts", isOn: model.binding(\.cleanup.enabled, ["cleanup", "enabled"]))
                 Toggle("Send the text around the cursor to the cleanup model",
                        isOn: model.binding(\.readCursorContext, ["readCursorContext"]))
+                ContactsToggle(isOn: model.binding(\.useContacts, ["useContacts"]))
                 ModelField(title: "Model", value: model.binding(\.cleanup.model, ["cleanup", "model"]),
                            suggestions: Self.cleanupModels)
                 Picker("Effort (Anthropic)", selection: model.binding(\.cleanup.effort, ["cleanup", "effort"])) {
@@ -186,6 +187,34 @@ private struct ConfigTab: View {
     private var providers: [String] {
         let common = ["anthropic", "openai", "groq", "openrouter"]
         return common + model.config.keys.keys.filter { !common.contains($0) }.sorted()
+    }
+}
+
+/// Turns contact matching on or off, asking for Contacts access when it's turned on.
+private struct ContactsToggle: View {
+    @Binding var isOn: Bool
+    @State private var denied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Use my contacts for names and email addresses", isOn: Binding(
+                get: { isOn },
+                set: { on in
+                    isOn = on
+                    guard on else { return }
+                    Task { @MainActor in
+                        denied = !(await ContactsIndex.shared.enable())
+                        if denied { isOn = false }
+                    }
+                }))
+            if denied {
+                Text("Logos doesn't have Contacts access. Turn on Logos in System Settings → Privacy & Security → Contacts, then try again.")
+                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Logos matches each dictation against your contacts on your Mac. Only the people it seems to mention, with their email addresses, go to the cleanup model.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

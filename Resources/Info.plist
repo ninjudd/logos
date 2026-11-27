@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Logos records your voice while you hold the dictation key.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Logos spells the names and fills in the email addresses of people you mention while dictating.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Logos transcribes your dictation on this Mac.</string>
 </dict>

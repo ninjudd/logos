@@ -29,6 +29,11 @@ enum Paster {
         }
     }
 
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     private static func snapshot(_ pasteboard: NSPasteboard) -> [NSPasteboardItem] {
         (pasteboard.pasteboardItems ?? []).map { item in
             let copy = NSPasteboardItem()

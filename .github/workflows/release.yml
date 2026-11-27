@@ -1,0 +1,101 @@
+# Releases Logos in two steps, so that merging a pull request is the decision to ship.
+#
+# 1. Run this workflow by hand from main, choosing patch, minor, or major. It
+#    opens a "Release X.Y.Z" pull request that bumps the version in
+#    Resources/Info.plist.
+# 2. Merging that pull request runs the publish job, which tags vX.Y.Z and
+#    publishes a GitHub release with generated notes. `logos update` installs
+#    the newest release by building its source on each Mac, so a release needs
+#    no built files.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+  push:
+    branches: [main]
+    paths: [Resources/Info.plist]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  propose:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse to release from anywhere but main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Run the release workflow from main, not $GITHUB_REF." >&2
+          exit 1
+      - uses: actions/checkout@v4
+      - name: Bump the version
+        id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: echo "version=$(python3 .github/scripts/release.py bump "$BUMP")" >> "$GITHUB_OUTPUT"
+      - name: Open the release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          branch="release/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "$branch"
+          git commit --all --message "Release $VERSION"
+          changed="$(git diff --name-only HEAD~1)"
+          if [ "$changed" != "Resources/Info.plist" ]; then
+            echo "The release commit should change only Resources/Info.plist, not: $changed" >&2
+            exit 1
+          fi
+          git push --force origin "$branch"
+          cat > body.md <<EOF
+          Bumps Logos to $VERSION. Merging this pull request tags v$VERSION and publishes the release, and \`logos update\` then installs it on each Mac.
+
+          ## Testing
+
+          This changes only the version in \`Resources/Info.plist\`. After merging, check the release from any directory:
+
+          \`\`\`sh
+          gh release view v$VERSION --repo $GITHUB_REPOSITORY
+          logos update
+          logos version
+          \`\`\`
+
+          The release should exist with generated notes. \`logos update\` should build and install it and restart the app, and \`logos version\` should print \`logos $VERSION\`. No release after a few minutes means the publish job failed; its run is under Actions → Release.
+          EOF
+          gh pr create --base main --head "$branch" --title "Release $VERSION" --body-file body.md
+
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag the version and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          status=0
+          python3 .github/scripts/release.py released || status=$?
+          if [ "$status" = 3 ]; then
+            python3 .github/scripts/release.py tag
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
+          version="$(python3 .github/scripts/release.py version)"
+          # Rerunning the job finishes a release that was tagged but not published.
+          if ! gh release view "v$version" >/dev/null 2>&1; then
+            gh release create "v$version" --verify-tag --generate-notes --title "Logos $version"
+          fi

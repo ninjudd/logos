@@ -21,8 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var chain: Task<Void, Never>?
     private var lastText: String?
     private var trustTimer: Timer?
+    private var availableUpdate: String?
+    private var updateTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        quitOtherCopies()
         ConfigStore.shared.ensureFiles()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         setIcon(recording: false)
@@ -34,6 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotkey.onPress = { [weak self] in MainActor.assumeIsolated { self?.startRecording() } }
         hotkey.onRelease = { [weak self] in MainActor.assumeIsolated { self?.finishRecording() } }
         hotkey.onCancel = { [weak self] in MainActor.assumeIsolated { self?.cancelRecording() } }
+        hotkey.onKeyDown = { [weak self] keyCode in
+            MainActor.assumeIsolated {
+                let escape: UInt16 = 53
+                if keyCode == escape, self?.overlay.isShowingResult == true { self?.overlay.hide() }
+            }
+        }
         hotkey.install()
         watchAccessibility()
 
@@ -41,6 +50,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let transcription = ConfigStore.shared.current.transcription
         Task { await Transcriber.prepare(transcription) }
         if let error = ConfigStore.shared.lastError { overlay.flash(error) }
+
+        checkForUpdate()
+        // The cache limits this to one request to GitHub a day.
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkForUpdate() }
+        }
+    }
+
+    /// Two copies would both answer the hotkey and paste every dictation twice.
+    /// The newest copy wins, because installs and updates start the new version.
+    private func quitOtherCopies() {
+        guard let id = Bundle.main.bundleIdentifier else { return }
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: id)
+            .filter { $0 != NSRunningApplication.current }
+        for other in others { other.terminate() }
+        guard !others.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            for other in others where !other.isTerminated { other.forceTerminate() }
+        }
+    }
+
+    // MARK: Updates
+
+    private func checkForUpdate() {
+        Task { @MainActor in
+            guard let tag = await Updater.latestTagCached(),
+                  Updater.isNewer(tag, than: Updater.installedVersion) else { return }
+            availableUpdate = tag
+        }
+    }
+
+    /// Runs the release's installer in the background. It builds the new version,
+    /// replaces this app, and starts it, so this process ends when it succeeds.
+    @objc private func installUpdate() {
+        guard let tag = availableUpdate else { return }
+        overlay.flash("Building Logos \(tag). It restarts when the build finishes.", seconds: 6, success: true)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let installer = try await Updater.installer(tag: tag)
+                let process = Updater.installProcess(installer: installer, tag: tag)
+                FileManager.default.createFile(atPath: Paths.updateLog.path, contents: nil)
+                let log = try FileHandle(forWritingTo: Paths.updateLog)
+                process.standardOutput = log
+                process.standardError = log
+                process.terminationHandler = { [weak self] process in
+                    guard process.terminationStatus != 0 else { return }
+                    Task { @MainActor in self?.overlay.flash("Update failed. See \(Paths.updateLog.path)") }
+                }
+                try process.run()
+            } catch {
+                overlay.flash("Update failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: Recording
@@ -54,7 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         pressedAt = Date()
-        targetApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "an unknown app"
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        targetApp = frontmost?.localizedName ?? "an unknown app"
+        if let pid = frontmost?.processIdentifier { FocusedField.prepare(pid: pid) }
         overlayShown = false
         meterTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
@@ -98,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let audio = r.url
         let prompt = ConfigStore.shared.prompt
+        let vocabulary = ConfigStore.shared.dictionary
         let app = targetApp
         let previous = chain
         pending += 1
@@ -107,7 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         chain = Task { @MainActor [weak self] in
             let result: Result<Pipeline.Outcome, Error>
             do {
-                result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt, app: app) { stage in
+                result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,
+                                                         vocabulary: vocabulary, app: app) { stage in
                     Task { @MainActor in
                         self?.stageLabel = stage
                         self?.refreshOverlay()
@@ -131,6 +198,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .success(let outcome):
             if !outcome.text.isEmpty {
                 lastText = outcome.text
+                if hasNowhereToPaste(config) {
+                    let text = outcome.text
+                    overlay.showResult(text) { [weak self] in
+                        Paster.copy(text)
+                        self?.overlay.flash("Copied", seconds: 1.5, success: true)
+                    }
+                    return
+                }
                 Paster.paste(outcome.text + (config.trailingSpace ? " " : ""), restoreClipboard: config.restoreClipboard)
                 if !AXIsProcessTrusted() {
                     overlay.flash("Copied to the clipboard. Grant Accessibility access to paste automatically.")
@@ -148,11 +223,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func refreshOverlay() {
         if recorder != nil && overlayShown {
             overlay.show(.recording)
-        } else if pending > 0 {
+        } else if pending > 0 && !overlay.isShowingResult {
             overlay.show(.processing(stageLabel))
-        } else if !overlay.isShowingMessage {
+        } else if !overlay.isHoldingContent {
             overlay.hide()
         }
+    }
+
+    /// True when the focused element can't take text, so pressing ⌘V would lose
+    /// the dictation. Without Accessibility access Logos can't tell, and copies.
+    private func hasNowhereToPaste(_ config: Config) -> Bool {
+        guard config.showWhenNoTextField, AXIsProcessTrusted() else { return false }
+        if let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier, config.alwaysPasteApps.contains(id) {
+            return false
+        }
+        return FocusedField.acceptsText(FocusedField.current()) == false
     }
 
     // MARK: Accessibility
@@ -182,7 +267,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .leftOption: "Left Option"
         case .rightOption: "Right Option"
         }
+        menu.addItem(NSMenuItem(title: "Logos \(Updater.installedVersion)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Hold \(key) to dictate", action: nil, keyEquivalent: ""))
+        if let availableUpdate {
+            menu.addItem(item("Update to \(availableUpdate)…", #selector(installUpdate)))
+        }
         if let error = ConfigStore.shared.lastError {
             menu.addItem(NSMenuItem(title: "⚠︎ \(error)", action: nil, keyEquivalent: ""))
         }
@@ -191,6 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(item("Edit Prompt…", #selector(editPrompt)))
+        menu.addItem(item("Edit Dictionary…", #selector(editDictionary)))
         menu.addItem(item("Edit Config…", #selector(editConfig)))
         menu.addItem(item("Open History", #selector(openHistory)))
         let copy = item("Copy Last Dictation", #selector(copyLast))
@@ -210,6 +300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func editPrompt() { NSWorkspace.shared.open(Paths.prompt) }
+    @objc private func editDictionary() { NSWorkspace.shared.open(Paths.dictionary) }
     @objc private func editConfig() { NSWorkspace.shared.open(Paths.config) }
 
     @objc private func openHistory() {
@@ -221,8 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func copyLast() {
         guard let lastText else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(lastText, forType: .string)
+        Paster.copy(lastText)
     }
 
     @objc private func openAccessibility() {

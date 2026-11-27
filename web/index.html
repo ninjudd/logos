@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logos — dictation for your Mac</title>
+  <meta name="description" content="Hold Option, speak, and let go. Logos transcribes, cleans up the text with a prompt you write and a model you choose, and pastes it where you're typing.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111'/%3E%3Cg fill='%23fff'%3E%3Crect x='7' y='13' width='3' height='6' rx='1.5'/%3E%3Crect x='12' y='9' width='3' height='14' rx='1.5'/%3E%3Crect x='17' y='6' width='3' height='20' rx='1.5'/%3E%3Crect x='22' y='11' width='3' height='10' rx='1.5'/%3E%3C/g%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #fbfaf8;
+      --fg: #1b1a18;
+      --muted: #6b6760;
+      --line: #e6e2dc;
+      --card: #ffffff;
+      --code-bg: #1b1a18;
+      --code-fg: #f4f1ec;
+      --accent: #3a5bd9;
+      color-scheme: light dark;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121211;
+        --fg: #ecebe8;
+        --muted: #9a968f;
+        --line: #2a2926;
+        --card: #1a1918;
+        --code-bg: #000000;
+        --code-fg: #ecebe8;
+        --accent: #8ea6ff;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { max-width: 720px; margin: 0 auto; padding: 72px 20px 48px; }
+    h1 { font-size: 52px; line-height: 1.05; letter-spacing: -0.03em; margin: 28px 0 16px; }
+    h2 { font-size: 22px; letter-spacing: -0.01em; margin: 56px 0 12px; }
+    p { margin: 0 0 14px; }
+    .lede { font-size: 21px; color: var(--muted); max-width: 34em; }
+    a { color: var(--accent); }
+    code { font: 0.9em ui-monospace, "SF Mono", Menlo, monospace; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 3px;
+      height: 36px; padding: 0 16px;
+      background: #111; border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+    }
+    .pill span {
+      width: 3px; height: 4px; border-radius: 2px; background: #fff;
+      animation: level 1.4s ease-in-out infinite;
+    }
+    @keyframes level { 0%, 100% { height: 4px; } 40% { height: 22px; } }
+    @media (prefers-reduced-motion: reduce) { .pill span { animation: none; height: 10px; } }
+
+    .install {
+      display: flex; align-items: center; gap: 12px;
+      margin: 28px 0 8px; padding: 14px 16px;
+      background: var(--code-bg); color: var(--code-fg); border-radius: 12px;
+      overflow-x: auto;
+    }
+    .install code { flex: 1; white-space: nowrap; font-size: 15px; }
+    .install code::before { content: "$ "; opacity: 0.5; }
+    .install button {
+      flex: none; border: 0; border-radius: 8px; padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.12); color: inherit; font: inherit; font-size: 14px; cursor: pointer;
+    }
+    .install button:hover { background: rgba(255, 255, 255, 0.2); }
+    .note { font-size: 15px; color: var(--muted); }
+
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 18px; }
+    .feature { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+    .feature h3 { font-size: 17px; margin: 0 0 6px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 16px; }
+
+    pre {
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 16px 18px; overflow-x: auto; font-size: 14px; line-height: 1.5;
+    }
+    footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 15px; color: var(--muted); }
+    @media (max-width: 520px) { h1 { font-size: 40px; } main { padding-top: 48px; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="pill" aria-hidden="true">
+    <span style="animation-delay: -0.1s"></span><span style="animation-delay: -0.5s"></span>
+    <span style="animation-delay: -0.9s"></span><span style="animation-delay: -0.2s"></span>
+    <span style="animation-delay: -0.7s"></span><span style="animation-delay: -1.1s"></span>
+    <span style="animation-delay: -0.3s"></span><span style="animation-delay: -0.8s"></span>
+    <span style="animation-delay: -1.2s"></span><span style="animation-delay: -0.4s"></span>
+    <span style="animation-delay: -0.6s"></span><span style="animation-delay: -1.0s"></span>
+  </div>
+
+  <h1>Dictation for your Mac, on your terms.</h1>
+  <p class="lede">Hold Option, speak, and let go. Logos transcribes what you said, cleans it up with a prompt you write and a model you choose, and pastes it where you're typing.</p>
+
+  <div class="install">
+    <code id="install">curl -fsSL https://logosvoice.dev/install.sh | bash</code>
+    <button type="button" id="copy">Copy</button>
+  </div>
+  <p class="note">Needs macOS 26 or later and Apple's free Command Line Tools (<code>xcode-select --install</code>). Logos builds from source on your Mac, so you need no developer account.</p>
+
+  <h2>Why Logos</h2>
+  <div class="features">
+    <div class="feature">
+      <h3>Your prompt</h3>
+      <p>The cleanup prompt is a file you edit. Logos rereads it on every dictation, and it can adapt to the app you're dictating into.</p>
+    </div>
+    <div class="feature">
+      <h3>Your models</h3>
+      <p>Pick each model with one line, such as <code>anthropic/claude-haiku-5-5</code> or <code>groq/whisper-large-v3-turbo</code>. OpenAI, Groq, OpenRouter, and Ollama work too.</p>
+    </div>
+    <div class="feature">
+      <h3>No server</h3>
+      <p>Logos calls each provider straight from your Mac with your own API keys. Speech runs on the device by default, with no key at all.</p>
+    </div>
+    <div class="feature">
+      <h3>Nothing lost</h3>
+      <p>Dictate with no text field focused, and Logos shows the text in a card to copy instead of pasting it into nothing.</p>
+    </div>
+  </div>
+
+  <h2>Set it up</h2>
+  <p>After installing, a waveform icon appears in the menu bar. Allow Microphone and Accessibility access when macOS asks, then put your keys in <code>~/.config/logos/config.json</code>:</p>
+<pre><code>{
+  "transcription": { "model": "apple" },
+  "cleanup": { "model": "anthropic/claude-opus-5-5", "effort": "low" },
+  "keys": { "anthropic": "sk-ant-..." }
+}</code></pre>
+  <p>The <code>logos</code> command runs an audio file through the same pipeline, so you can try a prompt change without dictating, and <code>logos update</code> builds and installs the newest release.</p>
+
+  <footer>Logos is built from source on each Mac. It sends your audio and text only to the providers you configure.</footer>
+</main>
+<script>
+  document.getElementById("copy").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    try {
+      await navigator.clipboard.writeText(document.getElementById("install").textContent);
+      button.textContent = "Copied";
+    } catch {
+      button.textContent = "Select and copy";
+    }
+    setTimeout(() => { button.textContent = "Copy"; }, 1500);
+  });
+</script>
+</body>
+</html>

@@ -21,8 +21,6 @@ The installer builds Logos, installs `/Applications/Logos.app`, links the `logos
 
 macOS keeps these permissions only while each build is signed by the same certificate. The build signs with your Apple Development or Developer ID certificate when you have one. Otherwise it creates a self-signed "Logos Local Signing" certificate once, in its own keychain in `~/Library/Application Support/Logos`, and signs every later build with it. Set `CODESIGN_IDENTITY` to pick a certificate yourself.
 
-While `ninjudd/logos` is private, the installer and `logos update` download with your `gh` login, or with `GH_TOKEN`.
-
 ## Update
 
 ```sh
@@ -129,3 +127,7 @@ The version lives in one place: `CFBundleShortVersionString` in `Resources/Info.
 2. Merge that pull request. The workflow then tags `vX.Y.Z` and publishes a GitHub release with generated notes, and `logos update` installs it everywhere.
 
 The workflow needs **Allow GitHub Actions to create and approve pull requests** turned on under Settings → Actions → General.
+
+## License
+
+Logos is open source under the [MIT License](LICENSE).

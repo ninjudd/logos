@@ -15,8 +15,11 @@ embedded() {
   ' web/index.html | sed 's/&lt;/</g; s/&gt;/>/g; s/&amp;/\&/g'
 }
 
-if ! embedded | diff -u web/install.md - >&2; then
-  echo "check-prompt: the prompt in web/index.html differs from web/install.md (diff above)." >&2
+# Vercel's build image has no diff, so compare in the shell and show a diff
+# only where one is installed.
+if [ "$(embedded)" != "$(cat web/install.md)" ]; then
+  if command -v diff >/dev/null; then embedded | diff -u web/install.md - >&2 || true; fi
+  echo "check-prompt: the prompt in web/index.html differs from web/install.md." >&2
   echo "Copy web/install.md into the <pre id=\"prompt\"> block, escaping &, <, and >." >&2
   exit 1
 fi

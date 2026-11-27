@@ -10,6 +10,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
 
     private var recorder: Recorder?
+    /// Starts and stops the microphone off the main thread. Core Audio can stall
+    /// while devices change, such as when a display or audio interface connects,
+    /// and Logos must stay responsive when it does.
+    private var audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+    /// Whether the hotkey is down for the current dictation.
+    private var holding = false
+    /// Identifies the microphone start in flight, so a late or abandoned one is discarded.
+    private var startID = 0
+    private var startInFlight: Int?
     private var pressedAt = Date()
     private var targetApp = ""
     private var targetRunningApp: NSRunningApplication?
@@ -112,12 +121,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Recording
 
     private func startRecording() {
-        guard recorder == nil else { return }
-        do {
-            recorder = try Recorder.start(inputDevice: ConfigStore.shared.current.inputDevice)
-        } catch {
-            overlay.flash(error.localizedDescription)
-            return
+        guard !holding, recorder == nil, startInFlight == nil else { return }
+        holding = true
+        startID += 1
+        let id = startID
+        startInFlight = id
+        let device = ConfigStore.shared.current.inputDevice
+        audioQueue.async { [weak self] in
+            let result = Result { try Recorder.start(inputDevice: device) }
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.microphoneStarted(result, id: id) }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            MainActor.assumeIsolated { self?.microphoneTimedOut(id) }
         }
         pressedAt = Date()
         let frontmost = NSWorkspace.shared.frontmostApplication
@@ -127,6 +144,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlayShown = false
         meterTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
+        }
+    }
+
+    private func microphoneStarted(_ result: Result<Recorder, Error>, id: Int) {
+        guard id == startID, startInFlight == id else {
+            // Abandoned after timing out; nothing is waiting for it.
+            if case .success(let late) = result { discard(late) }
+            return
+        }
+        startInFlight = nil
+        switch result {
+        case .success(let started) where holding:
+            recorder = started
+        case .success(let started):
+            // Released before the microphone started, which is too short to keep.
+            discard(started)
+        case .failure(let error):
+            _ = endRecording()
+            overlay.flash(error.localizedDescription)
+        }
+    }
+
+    /// Gives up on a microphone that hasn't started in time. Its thread may stay
+    /// stuck, so later recordings use a fresh one.
+    private func microphoneTimedOut(_ id: Int) {
+        guard startInFlight == id else { return }
+        startInFlight = nil
+        startID += 1
+        audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+        _ = endRecording()
+        overlay.flash("The microphone didn't respond. Try again, or choose another microphone in Settings.")
+        NSLog("Logos: the microphone took more than 3 seconds to start; abandoned it")
+    }
+
+    private func discard(_ recorder: Recorder) {
+        audioQueue.async { recorder.discard() }
+    }
+
+    /// Stops `recorder` on the audio queue and waits, so its file is complete.
+    private func stop(_ recorder: Recorder) async {
+        let queue = audioQueue
+        await withCheckedContinuation { continuation in
+            queue.async {
+                recorder.stop()
+                continuation.resume()
+            }
         }
     }
 
@@ -151,19 +214,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func cancelRecording() {
-        endRecording()?.discard()
+        holding = false
+        if let r = endRecording() { discard(r) }
         refreshOverlay()
     }
 
     private func finishRecording() {
-        guard let r = endRecording() else { return }
-        let config = ConfigStore.shared.current
-        guard Date().timeIntervalSince(pressedAt) >= config.minHoldSeconds else {
-            r.discard()
+        holding = false
+        guard let r = endRecording() else {
             refreshOverlay()
             return
         }
-        r.stop()
+        let config = ConfigStore.shared.current
+        guard Date().timeIntervalSince(pressedAt) >= config.minHoldSeconds else {
+            discard(r)
+            refreshOverlay()
+            return
+        }
 
         let audio = r.url
         let prompt = ConfigStore.shared.prompt
@@ -179,6 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshOverlay()
 
         chain = Task { @MainActor [weak self] in
+            await self?.stop(r)
             let result: Result<Pipeline.Outcome, Error>
             do {
                 result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,

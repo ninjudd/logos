@@ -67,6 +67,7 @@ import Testing
         monitor.onPress = { log.events.append("press") }
         monitor.onRelease = { log.events.append("release") }
         monitor.onCancel = { log.events.append("cancel") }
+        monitor.deliver = { $0() }
         return monitor
     }
 
@@ -148,6 +149,21 @@ import Testing
         monitor.isSuspended = true
         #expect(!monitor.handle(.keyDown, key(105, down: true)))
         #expect(log.events.isEmpty)
+    }
+
+    // Catches the tap waiting on the app, which stalls every key press on the Mac
+    // whenever starting the microphone does.
+    @Test func callbacksRunAfterTheTapReturns() {
+        let log = Log()
+        let monitor = HotkeyMonitor()
+        monitor.hotkey = { Hotkey("f13")! }
+        monitor.onPress = { log.events.append("press") }
+        var queued: [() -> Void] = []
+        monitor.deliver = { queued.append($0) }
+        #expect(monitor.handle(.keyDown, key(105, down: true)))
+        #expect(log.events.isEmpty)
+        queued.forEach { $0() }
+        #expect(log.events == ["press"])
     }
 
     // Catches Logos's own ⌘V paste cancelling or starting a dictation.

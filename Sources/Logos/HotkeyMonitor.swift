@@ -17,6 +17,10 @@ final class HotkeyMonitor {
     var hotkey: () -> Hotkey = { .option }
     /// While Settings records a new hotkey, every key goes to Settings instead.
     var isSuspended = false
+    /// Runs the callbacks after the tap has returned. The tap sits in front of
+    /// every key press on the Mac, so it decides what to swallow on the spot and
+    /// leaves slow work, such as starting the microphone, to run afterwards.
+    var deliver: (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -85,7 +89,7 @@ final class HotkeyMonitor {
                 cancel()
             }
         case .keyDown:
-            onKeyDown(UInt16(event.getIntegerValueField(.keyboardEventKeycode)))
+            keyDown(UInt16(event.getIntegerValueField(.keyboardEventKeycode)))
             cancel()
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             cancel()
@@ -103,7 +107,7 @@ final class HotkeyMonitor {
             press()
             return true
         case .keyDown:
-            onKeyDown(eventCode)
+            keyDown(eventCode)
             cancel()
             return false
         case .keyUp where eventCode == code && held:
@@ -117,21 +121,26 @@ final class HotkeyMonitor {
         }
     }
 
+    private func keyDown(_ code: UInt16) {
+        let onKeyDown = onKeyDown
+        deliver { onKeyDown(code) }
+    }
+
     private func press() {
         held = true
         cancelled = false
-        onPress()
+        deliver(onPress)
     }
 
     private func release() {
         held = false
-        if !cancelled { onRelease() }
+        if !cancelled { deliver(onRelease) }
     }
 
     private func cancel() {
         guard held, !cancelled else { return }
         cancelled = true
-        onCancel()
+        deliver(onCancel)
     }
 
     // MARK: Modifier flags

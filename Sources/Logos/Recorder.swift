@@ -1,8 +1,9 @@
 import AVFoundation
 
 /// Records the microphone to a temporary mono WAV file and measures its spectrum
-/// as it goes.
-final class Recorder {
+/// as it goes. It's started, stopped, and discarded on the app's audio queue and
+/// read from the main thread; the state both touch is behind `lock`.
+final class Recorder: @unchecked Sendable {
     let url: URL
     private var engine: AVAudioEngine?
     private let file: AVAudioFile

@@ -83,23 +83,21 @@ private struct ResultCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: OverlayController.resultIconGap) {
-                ScrollView {
-                    Text(text)
-                        .font(.system(size: OverlayController.resultFontSize))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(height: textHeight)
-                iconButton("xmark", label: "Close", action: close)
-            }
-            HStack {
+            HStack(spacing: OverlayController.resultIconGap) {
                 Text("No text field to paste into")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
                 Spacer()
                 iconButton("square.on.square", label: "Copy", action: copy)
+                iconButton("xmark", label: "Close", action: close)
             }
+            ScrollView {
+                Text(text)
+                    .font(.system(size: OverlayController.resultFontSize))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: textHeight)
         }
         .foregroundStyle(.white)
         .padding(OverlayController.resultPadding)
@@ -138,7 +136,7 @@ final class OverlayController {
     private static let pillSize = NSSize(width: 460, height: 60)
     private static let resultWidth: CGFloat = 440
     private static let resultMaxTextHeight: CGFloat = 160
-    /// The card's bottom row and the gap above it.
+    /// The card's header row and the gap below it.
     private static let resultChrome: CGFloat = 10 + resultIconSize
 
     let model = OverlayModel()
@@ -220,8 +218,7 @@ final class OverlayController {
     }
 
     private static func textHeight(_ text: String) -> CGFloat {
-        // The close button sits beside the text.
-        let width = resultWidth - 2 * resultPadding - resultIconGap - resultIconSize
+        let width = resultWidth - 2 * resultPadding
         let bounds = (text as NSString).boundingRect(
             with: NSSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],

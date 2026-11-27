@@ -13,8 +13,15 @@ enum Pipeline {
                     context: AppContext = AppContext(),
                     stage: @escaping (String) -> Void = { _ in }) async throws -> Outcome {
         let started = Date()
-        stage("Transcribing…")
-        let raw = try await Transcriber.transcribe(audio, config: config, vocabulary: vocabulary)
+        // A file Logos can't measure goes to the speech model, which may read it.
+        let level = try? Loudness.peakDB(of: audio)
+        let raw: String
+        if let level, Loudness.isSilent(level, threshold: config.silenceThresholdDB) {
+            raw = ""
+        } else {
+            stage("Transcribing…")
+            raw = try await Transcriber.transcribe(audio, config: config, vocabulary: vocabulary)
+        }
         let transcribed = Date()
         var context = context
         context.hints += People.hints(for: raw, config: config, people: ContactsIndex.shared.people,
@@ -44,6 +51,7 @@ enum Pipeline {
                 "transcribeSeconds": (transcribed.timeIntervalSince(started) * 100).rounded() / 100,
                 "cleanupSeconds": (Date().timeIntervalSince(transcribed) * 100).rounded() / 100,
                 "warning": outcome.warning ?? "",
+                "peakDB": level.map { ($0 * 10).rounded() / 10 as Any } ?? NSNull(),
             ])
         }
         return outcome

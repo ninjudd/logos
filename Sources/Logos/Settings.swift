@@ -142,6 +142,8 @@ private struct ConfigTab: View {
                 MicrophonePicker(selection: model.binding(\.inputDevice, ["inputDevice"]))
                 TextField("Shortest hold, in seconds", value: model.binding(\.minHoldSeconds, ["minHoldSeconds"]),
                           format: .number)
+                TextField("Silence below, in dBFS", value: model.binding(\.silenceThresholdDB, ["silenceThresholdDB"]),
+                          format: .number)
                 Toggle("Add a space after each paste", isOn: model.binding(\.trailingSpace, ["trailingSpace"]))
                 Toggle("Put the clipboard back after pasting", isOn: model.binding(\.restoreClipboard, ["restoreClipboard"]))
                 Toggle("Show a card when there's no text field", isOn: model.binding(\.showWhenNoTextField, ["showWhenNoTextField"]))

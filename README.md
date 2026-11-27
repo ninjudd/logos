@@ -8,6 +8,8 @@ There is no Logos server. The app calls each provider's API directly from your M
 
 You need macOS 26 or later. Setup takes about five minutes.
 
+To have a coding agent such as Claude Code, Cursor, or Codex do it for you, give it https://logosvoice.dev/install.md, or use the **Copy prompt** button on [logosvoice.dev](https://logosvoice.dev).
+
 1. Install Apple's free Command Line Tools, which Logos builds with. Skip this step if you already have Xcode.
 
    ```sh
@@ -24,9 +26,9 @@ You need macOS 26 or later. Setup takes about five minutes.
 
 3. Allow the two permissions macOS asks for:
    - **Microphone**, so Logos can record while you hold the key. Click **Allow**.
-   - **Accessibility**, so Logos can notice the hotkey in other apps and press ⌘V for you. Open System Settings → Privacy & Security → Accessibility and turn on **Logos**. Until you do, Logos copies each dictation to the clipboard instead of pasting it.
+   - **Accessibility**, so Logos can notice the hotkey in other apps and press ⌘V for you. Open System Settings → Privacy & Security → Accessibility and turn on **Logos**. Until you do, holding Option does nothing, because Logos can't see the key. Logos notices the change within a few seconds, so you don't need to restart it.
 
-4. Add an Anthropic API key for cleanup. Without one, Logos still works, but it pastes the raw transcript.
+4. Add an Anthropic API key for cleanup. Without one, Logos pastes the raw transcript and shows `Cleanup failed, pasted raw text: No anthropic key under "keys" in config.json` after every dictation. To dictate without cleanup and without the message, turn off **Clean up transcripts** under **Cleanup** in **Settings… → Config**.
    1. Sign in at [console.anthropic.com](https://console.anthropic.com), open **API Keys**, and create a key. The page shows the key only once, so copy it now.
    2. Click the waveform icon in the menu bar, choose **Settings…**, and paste the key into **anthropic** under **API keys** on the **Config** tab. Logos saves it as you type.
 
@@ -126,6 +128,7 @@ It prints the raw and cleaned text and how long the whole run took.
 Hold the hotkey, talk, and let go.
 
 - **While you hold the key**, a pill at the bottom of the screen shows the frequencies in your voice, low pitches on the left. A spinner follows while Logos transcribes and cleans up.
+- **A hold with nothing said** shows "No speech detected" and pastes nothing. Logos measures how loud each recording is before it transcribes it, and a recording quieter than `silenceThresholdDB` goes to no model. Given silence, Whisper models can answer with made-up text, often a word from your dictionary.
 - **A quick tap** shorter than `minHoldSeconds` is ignored. Pressing another key or clicking while you hold a modifier hotkey cancels the recording, so the modifier's shortcuts keep working.
 - **With no text field focused**, such as on the desktop, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, and press Esc or click the X to dismiss the card.
 - **The menu bar icon** has **Settings…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
@@ -143,7 +146,8 @@ This builds and installs the newest release, then restarts the app. Logos checks
 - **Nothing happens when you hold the hotkey.** Check that **Logos** is on in System Settings → Privacy & Security → Accessibility. If it is, turn it off and on again.
 - **The text lands on the clipboard instead of in the app.** The same Accessibility permission is missing.
 - **Another app opens when you double-tap Option**, such as the Claude desktop app's Quick Entry. That app is listening for the same key. Turn off or change its shortcut, or choose another Logos hotkey.
-- **Dictation records silence.** Logos is recording from a device with no microphone attached. Choose **Built-in microphone (recommended)** from the **Microphone** menu in **Settings… → Config**.
+- **"No speech detected" on every dictation.** Logos is recording from a device with no microphone attached. Choose **Built-in microphone (recommended)** from the **Microphone** menu in **Settings… → Config**.
+- **"No speech detected" when you spoke softly.** Your recording was quieter than `silenceThresholdDB`, so Logos didn't transcribe it. Each line of `history.jsonl` gives the dictation's `peakDB`, the level of its loudest 50 milliseconds. Speak closer to the microphone, or set `silenceThresholdDB` below the `peakDB` of your soft speech, such as `-55`.
 - **"The microphone didn't respond."** The audio system was busy, usually because a display or an audio interface was connecting. Dictate again.
 - **"Cleanup failed, pasted raw text."** The message names the cause, usually a missing or mistyped API key. Check the key under **API keys** in **Settings… → Config**.
 - **A card appears where you expected a paste.** Logos didn't recognize that app's text field. Add the app's bundle ID to `alwaysPasteApps` in `config.json`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
@@ -156,7 +160,7 @@ Logos keeps its files in `~/.config/logos/` and rereads each one when it changes
 - **`config.json`** holds settings and API keys, readable only by you. The **Config** tab writes only the setting you change, so settings you add by hand are kept.
 - **`prompt.md`** is the cleanup prompt.
 - **`dictionary.txt`** is your dictionary.
-- **`history.jsonl`** logs each dictation's raw and cleaned text, models, and timings.
+- **`history.jsonl`** logs each dictation's raw and cleaned text, models, timings, and loudness.
 - **`context.d/`** holds files other apps write to tell Logos what to listen for.
 
 Models are named `provider/model`, and each provider's key goes under `keys`. You can leave out any setting you don't change:
@@ -175,6 +179,7 @@ A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variabl
 | --- | --- | --- |
 | `hotkey` | `option` | The key to hold. A modifier alone, either side or one side (`option`, `rightOption`, `leftCommand`, `fn`), or any key with optional modifiers (`f13`, `ctrl+space`, `cmd+shift+d`). |
 | `minHoldSeconds` | `0.3` | The shortest hold that counts as a dictation. |
+| `silenceThresholdDB` | `-45` | The level below which a recording counts as silence, in decibels below the loudest sound a recording can hold (dBFS). Logos measures the recording's loudest 50 milliseconds. Below this level, the recording goes to no model and nothing is pasted. Speech usually measures between -30 and -10, and a quiet room between -60 and -50. `-100` sends every recording. |
 | `inputDevice` | `builtIn` | The microphone: `builtIn`, `system` for macOS's default input, or a device's UID from the **Microphone** menu. |
 | `transcription.model` | `apple` | The speech model. |
 | `transcription.locale` | `en-US` | The language you speak. |
@@ -245,7 +250,15 @@ Name the file after your tool, such as `projector.json`, and write it atomically
 - **`logos update`** builds and installs the newest release. `--check` only reports whether one is out.
 - **`logos version`** prints the installed version.
 
-Set `LOGOS_OFFLINE` to stop both the app and the command from checking for releases.
+Set `LOGOS_OFFLINE` to any value to stop the daily check for a new release. With it set, the waveform menu shows no **Update to** item, and `logos transcribe` never warns that a newer release is out. It doesn't affect `logos update`, which always asks GitHub for the newest release.
+
+The app sees `LOGOS_OFFLINE` only when launchd passes it on, because an app that Finder or `open` starts doesn't get your shell's environment. Set it for launchd, then quit and reopen Logos:
+
+```sh
+launchctl setenv LOGOS_OFFLINE 1
+```
+
+The setting lasts until you log out. A shell variable, such as one set in `~/.zshrc`, reaches only the `logos` command.
 
 ## Develop
 

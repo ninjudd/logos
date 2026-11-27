@@ -38,6 +38,9 @@ struct Config: Codable {
     var hotkey = Hotkey.option
     /// Holds shorter than this are treated as a tap and discarded.
     var minHoldSeconds = 0.3
+    /// Recordings whose loudest 50 ms stays below this level, in dBFS, count as
+    /// silence and are never transcribed. -100 sends every recording.
+    var silenceThresholdDB = -45.0
     /// The microphone to record from: "builtIn" for the Mac's own, whatever
     /// macOS's default input is; "system" for macOS's default input; or a
     /// device's UID. A device that isn't connected falls back to the built-in one.

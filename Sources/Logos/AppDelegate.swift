@@ -6,7 +6,7 @@ import ServiceManagement
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let overlay = OverlayController()
     private let hotkey = HotkeyMonitor()
-    private let settings = SettingsWindowController()
+    private lazy var settings = SettingsWindowController(hotkey: hotkey)
     private var statusItem: NSStatusItem!
 
     private var recorder: Recorder?
@@ -270,13 +270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let config = ConfigStore.shared.current
-        let key = switch config.hotkey {
-        case .option: "Option"
-        case .leftOption: "Left Option"
-        case .rightOption: "Right Option"
-        }
         menu.addItem(NSMenuItem(title: "Logos \(Updater.installedVersion)", action: nil, keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Hold \(key) to dictate", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Hold \(config.hotkey) to dictate", action: nil, keyEquivalent: ""))
         if let availableUpdate {
             menu.addItem(item("Update to \(availableUpdate)…", #selector(installUpdate)))
         }

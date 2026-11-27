@@ -25,7 +25,7 @@ import Testing
 
     // Catches a typo in config.json being silently replaced by the default.
     @Test func unknownHotkeyIsAnError() {
-        #expect(throws: (any Error).self) { try decode(#"{"hotkey": "fn"}"#) }
+        #expect(throws: (any Error).self) { try decode(#"{"hotkey": "middleOption"}"#) }
     }
 
     @Test func nonObjectFileIsAnError() {

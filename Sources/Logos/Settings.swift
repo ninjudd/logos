@@ -33,6 +33,8 @@ final class SettingsModel: ObservableObject {
     @Published var prompt = ""
     @Published var dictionary = ""
     @Published var error: String?
+    /// Tells the app whether a new hotkey is being recorded.
+    var setRecording: (Bool) -> Void = { _ in }
     private var pendingSaves: [String: Task<Void, Never>] = [:]
 
     /// Reads all three files again, so edits made elsewhere show up.
@@ -135,11 +137,8 @@ private struct ConfigTab: View {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
             }
             Section("Dictation") {
-                Picker("Hold to dictate", selection: model.binding(\.hotkey, ["hotkey"]) { $0.rawValue }) {
-                    Text("Either Option key").tag(Config.Hotkey.option)
-                    Text("Left Option").tag(Config.Hotkey.leftOption)
-                    Text("Right Option").tag(Config.Hotkey.rightOption)
-                }
+                ShortcutField(hotkey: model.binding(\.hotkey, ["hotkey"]) { $0.spec },
+                              setRecording: model.setRecording)
                 TextField("Shortest hold, in seconds", value: model.binding(\.minHoldSeconds, ["minHoldSeconds"]),
                           format: .number)
                 Toggle("Add a space after each paste", isOn: model.binding(\.trailingSpace, ["trailingSpace"]))
@@ -186,6 +185,95 @@ private struct ConfigTab: View {
     private var providers: [String] {
         let common = ["anthropic", "openai", "groq", "openrouter"]
         return common + model.config.keys.keys.filter { !common.contains($0) }.sorted()
+    }
+}
+
+/// Shows the hotkey, records a new one when clicked, and offers common choices.
+private struct ShortcutField: View {
+    @Binding var hotkey: Hotkey
+    let setRecording: (Bool) -> Void
+    @State private var recording = false
+    @State private var monitor: Any?
+    @State private var pendingModifier: Hotkey.Modifier?
+
+    private static let presets = ["option", "rightOption", "rightCommand", "fn", "f13"].compactMap(Hotkey.init)
+
+    // Virtual key codes of the modifier keys, which identify the side pressed.
+    private static let modifierKeys: [UInt16: Hotkey.Modifier] = [
+        54: .rightCommand, 55: .leftCommand, 56: .leftShift, 60: .rightShift,
+        58: .leftOption, 61: .rightOption, 59: .leftControl, 62: .rightControl, 63: .fn,
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Hold to dictate")
+                Spacer()
+                Button(recording ? "Press a key…" : hotkey.description) { recording ? stop() : start() }
+                Menu {
+                    ForEach(Self.presets, id: \.spec) { preset in
+                        Button(preset.description) { hotkey = preset }
+                    }
+                } label: {
+                    Image(systemName: "chevron.up.chevron.down")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+            if recording {
+                Text("Press the key or combination to hold. A modifier counts when you press and release it alone. Esc cancels.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if hotkey.typesText {
+                Text("\(hotkey.description) types text, so it won't type anywhere while Logos runs.")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+        }
+        .onDisappear { stop() }
+    }
+
+    private func start() {
+        recording = true
+        pendingModifier = nil
+        setRecording(true)
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            record(event)
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        if recording { setRecording(false) }
+        recording = false
+    }
+
+    private func record(_ event: NSEvent) {
+        switch event.type {
+        case .keyDown:
+            let modifiers = event.modifierFlags.intersection(Hotkey.comboModifiers)
+            if event.keyCode == 53 && modifiers.isEmpty {
+                stop()
+                return
+            }
+            hotkey = Hotkey(kind: .key(code: event.keyCode, modifiers: modifiers))
+            stop()
+        case .flagsChanged:
+            let held = [NSEvent.ModifierFlags.command, .control, .option, .shift, .function]
+                .filter { event.modifierFlags.contains($0) }.count
+            if held == 0, let modifier = pendingModifier {
+                hotkey = Hotkey(kind: .modifier(modifier))
+                stop()
+            } else if held == 1, pendingModifier == nil, let modifier = Self.modifierKeys[event.keyCode] {
+                pendingModifier = modifier
+            } else if held > 1 {
+                // Becoming a combination; wait for its key.
+                pendingModifier = nil
+            }
+        default:
+            break
+        }
     }
 }
 
@@ -244,6 +332,12 @@ private struct TextFileTab: View {
 @MainActor
 final class SettingsWindowController {
     private let model = SettingsModel()
+
+    /// Pauses `hotkey` while Settings records a new one, so pressing the old
+    /// hotkey doesn't start a dictation.
+    init(hotkey: HotkeyMonitor) {
+        model.setRecording = { hotkey.isSuspended = $0 }
+    }
     private var window: NSWindow?
 
     func show() {

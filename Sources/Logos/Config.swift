@@ -7,10 +7,6 @@ import Foundation
 /// "groq/whisper-large-v3-turbo". Logos calls the provider's API directly from your
 /// Mac with the key you put under `keys`; there is no Logos server in between.
 struct Config: Codable {
-    enum Hotkey: String, Codable {
-        case option, leftOption, rightOption
-    }
-
     struct Transcription: Codable {
         /// "apple" for on-device transcription (no key), or "provider/model" for any
         /// provider with an OpenAI-compatible /audio/transcriptions endpoint.
@@ -38,6 +34,7 @@ struct Config: Codable {
         var baseURL: String
     }
 
+    /// The key to hold while dictating. See Hotkey for the forms it takes.
     var hotkey = Hotkey.option
     /// Holds shorter than this are treated as a tap and discarded.
     var minHoldSeconds = 0.3

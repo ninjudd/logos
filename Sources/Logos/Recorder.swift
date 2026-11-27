@@ -26,8 +26,17 @@ final class Recorder {
     }
 
     /// Starts recording from the default input device.
-    static func start() throws -> Recorder {
+    /// Starts recording from the microphone `inputDevice` names. If that device
+    /// can't be selected, it records from macOS's default input instead of not at all.
+    static func start(inputDevice: String) throws -> Recorder {
         let engine = AVAudioEngine()
+        if let device = AudioInput.resolve(inputDevice, among: AudioInput.devices()) {
+            do {
+                try AudioInput.select(device, for: engine)
+            } catch {
+                NSLog("Logos: %@; recording from the default input", error.localizedDescription)
+            }
+        }
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {

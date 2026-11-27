@@ -112,7 +112,7 @@ import Testing
         #expect(index.ownEmails.isEmpty)
     }
 
-    @Test func emailMentions() {
+    @Test func mailWordsCountAsMentioningEmail() {
         #expect(People.mentionsEmail("Send it to Jon's email address"))
         #expect(People.mentionsEmail("what's your e-mail"))
         #expect(People.mentionsEmail("Mail it to my Gmail"))
@@ -162,14 +162,14 @@ import Testing
     }
 
     // Published reference values for Jaro-Winkler.
-    @Test func jaroWinkler() {
+    @Test func jaroWinklerMatchesPublishedValues() {
         #expect(abs(People.jaroWinkler("martha", "marhta") - 0.961) < 0.001)
         #expect(abs(People.jaroWinkler("dixon", "dicksonx") - 0.813) < 0.001)
         #expect(People.jaroWinkler("same", "same") == 1)
         #expect(People.jaroWinkler("abc", "xyz") == 0)
     }
 
-    @Test func metaphoneKeys() {
+    @Test func metaphoneKeysMatchOnlyForSoundAlikes() {
         #expect(People.metaphone("Grubb") == People.metaphone("Grub"))
         #expect(People.metaphone("Kristin") == People.metaphone("Kirsten"))
         #expect(People.metaphone("Smith") == People.metaphone("Smyth"))

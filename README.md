@@ -212,7 +212,7 @@ To add a provider, give it a name, an API style, and a base URL. `api` is `anthr
 | --- | --- |
 | `{{app}}` | The name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. |
 | `{{dictionary}}` | Your dictionary as a bulleted list, notes included, or `(none)`. Leave it out and the cleanup model doesn't see your dictionary. |
-| `{{context}}` | The text around the cursor and hints from other apps, or `(none)`. The default prompt tells the model to use it only as context and never to repeat it. |
+| `{{context}}` | The text around the cursor, hints from other apps, and, when their settings are on, the names of contacts the transcript mentions and your own email addresses, or `(none)`. Leave it out and none of them reach the cleanup model. The default prompt tells the model to use it only as context and never to repeat it. |
 | `{{transcript}}` | The transcript. When the prompt contains it, Logos sends the whole prompt as the user message, with no system prompt. |
 
 ## Context from other apps

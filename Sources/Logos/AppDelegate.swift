@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var recorder: Recorder?
     private var pressedAt = Date()
     private var targetApp = ""
+    private var targetRunningApp: NSRunningApplication?
     private var overlayShown = false
     private var meterTimer: Timer?
 
@@ -121,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pressedAt = Date()
         let frontmost = NSWorkspace.shared.frontmostApplication
         targetApp = frontmost?.localizedName ?? "an unknown app"
+        targetRunningApp = frontmost
         if let pid = frontmost?.processIdentifier { FocusedField.prepare(pid: pid) }
         overlayShown = false
         meterTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
@@ -165,8 +167,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let audio = r.url
         let prompt = ConfigStore.shared.prompt
-        let vocabulary = ConfigStore.shared.dictionary
         let app = targetApp
+        // Read the field now, before anything else can change it.
+        var context = config.readCursorContext ? AppContext.capture(app: targetRunningApp) : AppContext()
+        let provided = ContextFiles.load(bundleID: targetRunningApp?.bundleIdentifier)
+        context.hints = provided.hints
+        let vocabulary = Vocabulary.merge(ConfigStore.shared.dictionary, provided.words)
         let previous = chain
         pending += 1
         stageLabel = "Transcribing…"
@@ -176,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let result: Result<Pipeline.Outcome, Error>
             do {
                 result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,
-                                                         vocabulary: vocabulary, app: app) { stage in
+                                                         vocabulary: vocabulary, app: app, context: context) { stage in
                     Task { @MainActor in
                         self?.stageLabel = stage
                         self?.refreshOverlay()

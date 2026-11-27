@@ -98,11 +98,34 @@ Other settings:
 - `restoreClipboard` puts your previous clipboard back after pasting (default `true`).
 - `showWhenNoTextField` shows the dictation in a card to copy from when nothing focused takes text (default `true`). Set it to `false` to always paste.
 - `alwaysPasteApps` lists bundle IDs of apps that always get a paste, such as `["com.mitchellh.ghostty"]` (default empty).
+- `readCursorContext` reads the text around the cursor, the field's placeholder, the window title, and a browser's page URL, and gives them to the cleanup model as `{{context}}` (default `true`). Password fields are never read, and transcription models never see any of it.
 - `saveHistory` turns `history.jsonl` on or off (default `true`).
 
 ## The prompt
 
-`prompt.md` is sent as the system prompt, and the transcript follows as the user message inside `<transcript>` tags. `{{app}}` in the prompt becomes the name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. `{{dictionary}}` becomes the words in `dictionary.txt` as a bulleted list, or `(none)`. The default prompt asks the model to spell those words exactly, which also fixes mishearings the transcription model makes. If your prompt leaves `{{dictionary}}` out, the cleanup model doesn't see the dictionary. If the prompt contains `{{transcript}}`, Logos sends the whole prompt as the user message with the transcript in that spot, and no system prompt.
+`prompt.md` is sent as the system prompt, and the transcript follows as the user message inside `<transcript>` tags. `{{app}}` in the prompt becomes the name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. `{{dictionary}}` becomes the words in `dictionary.txt` as a bulleted list, or `(none)`. The default prompt asks the model to spell those words exactly, which also fixes mishearings the transcription model makes. If your prompt leaves `{{dictionary}}` out, the cleanup model doesn't see the dictionary. `{{context}}` becomes what surrounds the cursor, from `readCursorContext`, and hints from other apps, described below, or `(none)`. The default prompt tells the model to use it only as context, for example to continue a sentence in lowercase, and never to repeat it. If the prompt contains `{{transcript}}`, Logos sends the whole prompt as the user message with the transcript in that spot, and no system prompt. Placeholders are filled in a single pass, so text from a field or an app is never treated as a placeholder.
+
+## Context from other apps
+
+Apps and tools can tell Logos what to listen for by writing JSON files to `~/.config/logos/context.d/`. At every dictation, Logos reads each file that applies, adds its words to your dictionary, and gives its prompt to the cleanup model in `{{context}}`. Nothing needs to be running or registered: write the file, and update or delete it when the context changes.
+
+```json
+{
+  "apps": ["com.mitchellh.ghostty", "com.googlecode.iterm2"],
+  "words": ["fix-pr", "review-repo", "logos: \"Logos\" for the app, \"logos\" for the command"],
+  "prompt": "The user is talking to a coding agent about pull requests.",
+  "expires": "2026-11-28T00:00:00Z"
+}
+```
+
+Every field is optional:
+
+- `apps` lists bundle IDs of the apps the file applies to. Without it, the file applies to every app. A tool that runs in a terminal should list terminal apps, since the terminal is the app in front.
+- `words` uses the same format as `dictionary.txt` lines, notes included. Your own dictionary wins when both list a word.
+- `prompt` is a hint for the cleanup model, labeled with the file's name, such as `From projector:`. Logos uses the first 2,000 characters.
+- `expires` is an ISO 8601 time after which Logos ignores the file, so context from a closed session doesn't linger.
+
+Name the file after your tool, such as `projector.json`, and write it atomically: write a temporary file, then rename it. Logos skips files that aren't valid JSON.
 
 ## The logos command
 

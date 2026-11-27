@@ -23,6 +23,9 @@ enum Pipeline {
             raw = try await Transcriber.transcribe(audio, config: config, vocabulary: vocabulary)
         }
         let transcribed = Date()
+        var context = context
+        context.hints += People.hints(for: raw, config: config, people: ContactsIndex.shared.people,
+                                      cardEmails: ContactsIndex.shared.ownEmails)
 
         var outcome = Outcome(raw: raw, text: raw)
         if raw.isEmpty {

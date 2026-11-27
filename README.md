@@ -92,6 +92,19 @@ logos: "Logos" for the app or project, "logos" for the command
 
 An entry sets the spelling, not the capitalization: the cleanup model picks the letter case from context. To say how, add a note after `: `, as in the last line. Lines that start with `#` are ignored. Every model except `apple` listens for these words, and the cleanup model spells them as written.
 
+## Use your contacts
+
+Logos can spell the people you mention the way your contacts list them. In **Settings… → Config**, turn on **Use my contacts for names** and allow Contacts access when macOS asks.
+
+Logos reads your contacts on your Mac and keeps up with them, so a contact you add or change works on your next dictation. It matches each transcript against them there, and only the names of the people the transcript seems to mention, at most five, go to the cleanup model:
+
+- **A name counts** when the transcript capitalizes it, as speech models do for names. A capitalized word that starts a sentence counts alone only as an exact name of five letters or more, so "Will you…" doesn't bring in Will.
+- **A full name ranks first**: a first name or nickname followed directly by the last name, such as "Jon Grub". Ordinary words in a row can sound like a name, as "will write" sounds like William Wright, so a pair counts only when the transcript capitalizes one of its words as a name, or when both words are spelled exactly as the contact's are. At most two of the five people may rest on a single name.
+- **Close matches count**: names that sound alike, such as "Grub" for Grubb or "Kirsten" for Kristin, typos, and short forms of first names, such as "Jon" for Jonathan.
+- **Other people's email addresses never go.** Logos doesn't read them, since those people didn't agree to share them with your cleanup provider.
+
+To have Logos fill in your own email address, turn on **Include my email addresses**. When a dictation mentions mail or an address, as in "send it to my email", the cleanup model gets the addresses on your own card in Contacts, if contacts are on, plus any you type under **Other email addresses**. The typed addresses work without Contacts access.
+
 ## Tune the prompt
 
 **Settings… → Prompt** holds the cleanup prompt, which Logos sends to the cleanup model with every dictation. Change it to match how you write: keep your own punctuation habits, format lists a certain way, or leave your phrasing alone. Logos rereads it on every dictation. The [prompt reference](#prompt-reference) lists the placeholders it can use.
@@ -182,6 +195,9 @@ A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variabl
 | `showWhenNoTextField` | `true` | Show a card to copy from when nothing focused takes text. |
 | `alwaysPasteApps` | empty | Bundle IDs of apps that always get a paste. |
 | `readCursorContext` | `true` | Send the text around the cursor, the field's placeholder, the window title, and a browser's page URL to the cleanup model. Password fields are never read, and speech models never see any of it. |
+| `useContacts` | `false` | Match each transcript against your contacts, and send the names of the people it mentions to the cleanup model. Never their email addresses. |
+| `includeMyEmails` | `false` | When a dictation mentions mail or an address, send your own addresses to the cleanup model: those on your card in Contacts, with `useContacts`, and `myEmails`. |
+| `myEmails` | `[]` | More email addresses of yours, sent with `includeMyEmails`. |
 | `saveHistory` | `true` | Keep `history.jsonl`. |
 
 To add a provider, give it a name, an API style, and a base URL. `api` is `anthropic` for the Anthropic Messages API, or `openai` for anything OpenAI-compatible:
@@ -201,7 +217,7 @@ To add a provider, give it a name, an API style, and a base URL. `api` is `anthr
 | --- | --- |
 | `{{app}}` | The name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. |
 | `{{dictionary}}` | Your dictionary as a bulleted list, notes included, or `(none)`. Leave it out and the cleanup model doesn't see your dictionary. |
-| `{{context}}` | The text around the cursor and hints from other apps, or `(none)`. The default prompt tells the model to use it only as context and never to repeat it. |
+| `{{context}}` | The text around the cursor, hints from other apps, and, when their settings are on, the names of contacts the transcript mentions and your own email addresses, or `(none)`. Leave it out and none of them reach the cleanup model. The default prompt tells the model to use it only as context and never to repeat it. |
 | `{{transcript}}` | The transcript. When the prompt contains it, Logos sends the whole prompt as the user message, with no system prompt. |
 
 ## Context from other apps

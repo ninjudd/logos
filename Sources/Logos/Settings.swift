@@ -159,6 +159,14 @@ private struct ConfigTab: View {
                 Toggle("Clean up transcripts", isOn: model.binding(\.cleanup.enabled, ["cleanup", "enabled"]))
                 Toggle("Send the text around the cursor to the cleanup model",
                        isOn: model.binding(\.readCursorContext, ["readCursorContext"]))
+                ContactsToggle(isOn: model.binding(\.useContacts, ["useContacts"]))
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Include my email addresses", isOn: model.binding(\.includeMyEmails, ["includeMyEmails"]))
+                    Text("When you mention mail or an address, the cleanup model gets your addresses: the ones on your card in Contacts, when contacts are on, and any below.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                EmailsField(addresses: model.binding(\.myEmails, ["myEmails"]))
+                    .disabled(!model.config.includeMyEmails)
                 ModelField(title: "Model", value: model.binding(\.cleanup.model, ["cleanup", "model"]),
                            suggestions: Self.cleanupModels)
                 Picker("Effort (Anthropic)", selection: model.binding(\.cleanup.effort, ["cleanup", "effort"])) {
@@ -188,6 +196,54 @@ private struct ConfigTab: View {
     private var providers: [String] {
         let common = ["anthropic", "openai", "groq", "openrouter"]
         return common + model.config.keys.keys.filter { !common.contains($0) }.sorted()
+    }
+}
+
+/// Turns contact matching on or off, asking for Contacts access when it's turned on.
+private struct ContactsToggle: View {
+    @Binding var isOn: Bool
+    @State private var denied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("Use my contacts for names", isOn: Binding(
+                get: { isOn },
+                set: { on in
+                    isOn = on
+                    guard on else {
+                        ContactsIndex.shared.disable()
+                        return
+                    }
+                    Task { @MainActor in
+                        denied = !(await ContactsIndex.shared.enable())
+                        if denied { isOn = false }
+                    }
+                }))
+            // Access can be turned off in System Settings while the toggle is on.
+            if denied || (isOn && ContactsIndex.isDenied) {
+                Text("Logos doesn't have Contacts access. Turn on Logos in System Settings → Privacy & Security → Contacts, then try again.")
+                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Logos matches each dictation against your contacts on your Mac. Only the names of people it seems to mention go to the cleanup model, never their email addresses.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// More email addresses of yours, typed as a list. It keeps its own text, so a
+/// trailing comma survives while you type the next address.
+private struct EmailsField: View {
+    @Binding var addresses: [String]
+    @State private var text = ""
+
+    var body: some View {
+        TextField("Other email addresses", text: $text, prompt: Text("you@example.com, you@work.example"))
+            .onAppear { text = addresses.joined(separator: ", ") }
+            .onChange(of: text) { _, new in
+                let parsed = People.parseEmails(new)
+                if parsed != addresses { addresses = parsed }
+            }
     }
 }
 

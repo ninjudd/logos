@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AVCaptureDevice.requestAccess(for: .audio) { _ in }
         let transcription = ConfigStore.shared.current.transcription
         Task { await Transcriber.prepare(transcription) }
+        if ConfigStore.shared.current.useContacts { Task { await ContactsIndex.shared.enable() } }
         if let error = ConfigStore.shared.lastError { overlay.flash(error) }
 
         checkForUpdate()

@@ -66,6 +66,14 @@ struct Config: Codable {
     /// page URL, and give them to the cleanup model as {{context}}. Transcription
     /// models never see them.
     var readCursorContext = true
+    /// Match each transcript against your contacts on your Mac, and give the
+    /// cleanup model the names of the people it mentions. Never their email addresses.
+    var useContacts = false
+    /// When a dictation mentions mail or an address, give the cleanup model your
+    /// own addresses: those on your card in Contacts, when useContacts is on, and myEmails.
+    var includeMyEmails = false
+    /// More addresses of yours, sent with includeMyEmails.
+    var myEmails: [String] = []
     /// Append raw and cleaned text to ~/.config/logos/history.jsonl.
     var saveHistory = true
 

@@ -88,16 +88,18 @@ private struct ResultCard: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.7))
                 Spacer()
-                iconButton("square.on.square", label: "Copy", action: copy)
                 iconButton("xmark", label: "Close", action: close)
             }
-            ScrollView {
-                Text(text)
-                    .font(.system(size: OverlayController.resultFontSize))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: OverlayController.resultIconGap) {
+                ScrollView {
+                    Text(text)
+                        .font(.system(size: OverlayController.resultFontSize))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: textHeight)
+                iconButton("square.on.square", label: "Copy", action: copy)
             }
-            .frame(height: textHeight)
         }
         .foregroundStyle(.white)
         .padding(OverlayController.resultPadding)
@@ -218,7 +220,8 @@ final class OverlayController {
     }
 
     private static func textHeight(_ text: String) -> CGFloat {
-        let width = resultWidth - 2 * resultPadding
+        // The copy button sits beside the text.
+        let width = resultWidth - 2 * resultPadding - resultIconGap - resultIconSize
         let bounds = (text as NSString).boundingRect(
             with: NSSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],

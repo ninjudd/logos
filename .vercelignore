@@ -1,5 +1,9 @@
-# The site is web/ plus install.sh, which the build copies into it.
+# The site is web/ plus install.sh, which the build copies into it, and the
+# script the build runs to check web/'s agent prompt.
 /*
 !/web
 !/install.sh
 !/vercel.json
+!/scripts
+/scripts/*
+!/scripts/check-prompt.sh

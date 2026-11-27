@@ -1,25 +1,121 @@
 # Logos
 
-Logos is a dictation app for the Mac menu bar. Hold Option, speak, and let go: Logos transcribes what you said, has a language model clean it up with a prompt you write, and pastes the result wherever you're typing. You choose the speech model and the language model, and you can see and edit the cleanup prompt.
+Logos is a dictation app for the Mac menu bar. Hold Option, speak, and let go: Logos transcribes what you said, has a language model clean it up with a prompt you write, and pastes the result wherever you're typing. You choose the speech model and the language model, and you can read and edit the cleanup prompt.
 
 There is no Logos server. The app calls each provider's API directly from your Mac with your own API keys, which it keeps in a config file on your machine. It has no third-party dependencies, only Apple frameworks.
 
-## Install
+## Get started
 
-Logos needs macOS 26 or later and Apple's free Command Line Tools, which `xcode-select --install` installs. It builds from source on your Mac, so you need no developer account. To install the latest release:
+You need macOS 26 or later. Setup takes about five minutes.
 
-```sh
-curl -fsSL https://logosvoice.dev/install.sh | bash
+1. Install Apple's free Command Line Tools, which Logos builds with. Skip this step if you already have Xcode.
+
+   ```sh
+   xcode-select --install
+   ```
+
+2. Install Logos:
+
+   ```sh
+   curl -fsSL https://logosvoice.dev/install.sh | bash
+   ```
+
+   The installer builds Logos from source on your Mac, so you need no developer account. It installs `/Applications/Logos.app`, links the `logos` command into `~/.local/bin`, and starts the app. A waveform icon appears in the menu bar.
+
+3. Allow the two permissions macOS asks for:
+   - **Microphone**, so Logos can record while you hold the key. Click **Allow**.
+   - **Accessibility**, so Logos can notice the hotkey in other apps and press ⌘V for you. Open System Settings → Privacy & Security → Accessibility and turn on **Logos**. Until you do, Logos copies each dictation to the clipboard instead of pasting it.
+
+4. Add an Anthropic API key for cleanup. Without one, Logos still works, but it pastes the raw transcript.
+   1. Sign in at [console.anthropic.com](https://console.anthropic.com), open **API Keys**, and create a key. The page shows the key only once, so copy it now.
+   2. Click the waveform icon in the menu bar, choose **Settings…**, and paste the key into **anthropic** under **API keys** on the **Config** tab. Logos saves it as you type.
+
+5. Click into any text field, hold Option, say a sentence with an "um" in it, and let go. The cleaned-up text appears where you clicked.
+
+Transcription starts on Apple's on-device speech model, which needs no key and keeps your audio on your Mac. For faster and more accurate transcription, switch to Groq. The next section shows how, and Groq's free tier covers everyday dictation.
+
+## Choose a speech model
+
+The speech model turns your recording into a raw transcript. Pick it from the **Model** menu under **Transcription** in **Settings… → Config**, or type any `provider/model` name there. The change applies to your next dictation.
+
+| Model | Runs | Key | Speed | Hears your dictionary |
+| --- | --- | --- | --- | --- |
+| `apple` (default) | On your Mac | None | Fast | No |
+| `apple/dictation` | On your Mac | None | Fast | Yes |
+| `groq/whisper-large-v3-turbo` | Groq's servers | Groq, free tier | About 0.3 seconds | Yes |
+| `openai/gpt-4o-transcribe` | OpenAI's servers | OpenAI, paid | About 1–2 seconds | Yes |
+| `openai/gpt-4o-mini-transcribe` | OpenAI's servers | OpenAI, paid | Faster than `gpt-4o-transcribe` | Yes |
+
+- **`apple`** keeps your audio on your Mac and works offline. It misses more names and technical words than the server models, and it ignores your dictionary. The first dictation downloads the model for your language.
+- **`apple/dictation`** is the model behind macOS keyboard dictation. It also runs on your Mac, and it listens for the words in your dictionary.
+- **`groq/whisper-large-v3-turbo`** is the recommended upgrade. It runs OpenAI's Whisper model on Groq's servers, returns a short dictation in about a third of a second, and spells names better than Apple's models.
+- **`openai/gpt-4o-transcribe`** is often the most accurate with accents, jargon, and fast speech, and it costs a fraction of a cent per dictation.
+
+### Set up Groq
+
+1. Sign in at [console.groq.com](https://console.groq.com), open **API Keys**, and create a key. Copy it, because the page shows it only once.
+2. In **Settings… → Config**, paste the key into **groq** under **API keys**.
+3. Under **Transcription**, choose `groq/whisper-large-v3-turbo` from the **Model** menu.
+
+Groq's free tier has no credits to run out. It's rate-limited instead: about 2,000 transcriptions a day, plus caps per minute and on audio per hour. A busy day of dictation uses a small fraction of that. If you hit a limit, Logos shows Groq's error instead of pasting. Switch back to `apple` in the same menu until the limit resets.
+
+### Set up OpenAI
+
+Create a key at [platform.openai.com](https://platform.openai.com) under **API keys**, paste it into **openai** under **API keys**, and choose an `openai/` model under **Transcription**. OpenAI bills per minute of audio, so add a payment method to your OpenAI account first.
+
+### Compare models on your own voice
+
+Each line of `~/.config/logos/history.jsonl` records a dictation's model, its `raw` transcript before cleanup, and `transcribeSeconds`. Dictate with one model for a while, switch, and compare the two in that file.
+
+## Choose a cleanup model
+
+The cleanup model rewrites the raw transcript with your prompt: it removes filler words, applies your corrections, fixes punctuation, and spells your dictionary's words right. Pick it from the **Model** menu under **Cleanup** in **Settings… → Config**.
+
+- **`anthropic/claude-opus-5-5`** is the default.
+- **`anthropic/claude-haiku-5-5`** answers faster and costs less, and it handles most dictation well.
+- **Effort**, Anthropic models only, trades speed for care. `low` is the default and suits dictation.
+- **Other providers** work too: `openai/<model>`, `groq/<model>`, `openrouter/<vendor>/<model>`, or `ollama/<model>` for a model running on your Mac in [Ollama](https://ollama.com), which needs no key.
+
+Turn off **Clean up transcripts** to paste the raw transcript. When cleanup fails, Logos pastes the raw transcript and shows why.
+
+## Teach Logos your words
+
+Logos gets names, product names, and jargon right when they're in your dictionary. Open **Settings… → Dictionary** and add one word or phrase per line:
+
+```
+Ninjudd
+Ghostty
+logos: "Logos" for the app or project, "logos" for the command
 ```
 
-From a checkout of this repository, run `./install.sh` instead.
+An entry sets the spelling, not the capitalization: the cleanup model picks the letter case from context. To say how, add a note after `: `, as in the last line. Lines that start with `#` are ignored. Every model except `apple` listens for these words, and the cleanup model spells them as written.
 
-The installer builds Logos, installs `/Applications/Logos.app`, links the `logos` command into `~/.local/bin`, and starts the app. A waveform icon appears in the menu bar. On first launch, macOS asks for two permissions:
+## Tune the prompt
 
-- **Microphone**, to record while you hold the key.
-- **Accessibility**, to notice the Option key in other apps and to press ⌘V for you. Turn Logos on under System Settings → Privacy & Security → Accessibility. Until you do, Logos copies each dictation to the clipboard instead of pasting it.
+**Settings… → Prompt** holds the cleanup prompt, which Logos sends to the cleanup model with every dictation. Change it to match how you write: keep your own punctuation habits, format lists a certain way, or leave your phrasing alone. Logos rereads it on every dictation. The [prompt reference](#prompt-reference) lists the placeholders it can use.
 
-macOS keeps these permissions only while each build is signed by the same certificate. The build signs with your Apple Development or Developer ID certificate when you have one. Otherwise it creates a self-signed "Logos Local Signing" certificate once, in its own keychain in `~/Library/Application Support/Logos`, and signs every later build with it. Set `CODESIGN_IDENTITY` to pick a certificate yourself.
+To try a prompt change without dictating, run a recording through it with `logos transcribe`:
+
+```sh
+say -o /tmp/test.wav --data-format=LEI16@16000 "um so I think we should meet at three, no wait, at four"
+logos transcribe /tmp/test.wav --app Slack
+```
+
+It prints the raw and cleaned text and how long the whole run took.
+
+## Pick the hotkey and the microphone
+
+- **Hotkey.** In **Settings… → Config**, click the hotkey button and press the key you want to hold. A modifier counts when you press and release it alone, such as Right Option or Fn. Any other key works too, alone or with modifiers, such as F13 or ⌃Space. Logos keeps that key from reaching other apps, so pick one you don't otherwise use.
+- **Microphone.** Logos records from your Mac's built-in microphone, even when macOS switches its default input to an audio interface or a display. To use another microphone, choose it from the **Microphone** menu. Logos falls back to the built-in microphone while the one you chose isn't connected.
+
+## Use it
+
+Hold the hotkey, talk, and let go.
+
+- **While you hold the key**, a pill at the bottom of the screen shows the frequencies in your voice, low pitches on the left. A spinner follows while Logos transcribes and cleans up.
+- **A quick tap** shorter than `minHoldSeconds` is ignored. Pressing another key or clicking while you hold a modifier hotkey cancels the recording, so the modifier's shortcuts keep working.
+- **With no text field focused**, such as on the desktop, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, and press Esc or click the X to dismiss the card.
+- **The menu bar icon** has **Settings…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
 
 ## Update
 
@@ -27,55 +123,61 @@ macOS keeps these permissions only while each build is signed by the same certif
 logos update
 ```
 
-This builds and installs the newest release, then restarts the app. `logos update --check` only reports whether there is one. Logos checks GitHub at most once a day, and when a newer release exists, the menu bar menu shows **Update to vX.Y.Z…** and `logos transcribe` prints a warning. Set `LOGOS_OFFLINE` to turn the check off.
+This builds and installs the newest release, then restarts the app. Logos checks for releases at most once a day. When one is out, the menu bar menu shows **Update to vX.Y.Z…**, which does the same thing. `logos update --check` only reports whether there is one.
 
-## Use it
+## Troubleshooting
 
-Hold Option, or whichever key you set as the hotkey, talk, and release. A small pill at the bottom of the screen shows the frequencies in your voice while you hold the key, with low pitches on the left and high on the right. Each bar jumps up with sound in its range and fades when the sound stops. Then a spinner shows while Logos transcribes and cleans up. Taps shorter than `minHoldSeconds` are ignored. Pressing any other key or clicking while you hold Option cancels the recording, so Option shortcuts and Option-typed characters keep working.
+- **Nothing happens when you hold the hotkey.** Check that **Logos** is on in System Settings → Privacy & Security → Accessibility. If it is, turn it off and on again.
+- **The text lands on the clipboard instead of in the app.** The same Accessibility permission is missing.
+- **Another app opens when you double-tap Option**, such as the Claude desktop app's Quick Entry. That app is listening for the same key. Turn off or change its shortcut, or choose another Logos hotkey.
+- **Dictation records silence.** Logos is recording from a device with no microphone attached. Choose **Built-in microphone (recommended)** from the **Microphone** menu in **Settings… → Config**.
+- **"The microphone didn't respond."** The audio system was busy, usually because a display or an audio interface was connecting. Dictate again.
+- **"Cleanup failed, pasted raw text."** The message names the cause, usually a missing or mistyped API key. Check the key under **API keys** in **Settings… → Config**.
+- **A card appears where you expected a paste.** Logos didn't recognize that app's text field. Add the app's bundle ID to `alwaysPasteApps` in `config.json`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
+- **macOS asks for permissions again after an update.** macOS keeps them only while every build is signed by the same certificate. The build uses your Apple Development or Developer ID certificate when you have one. Otherwise it creates a "Logos Local Signing" certificate once, in its own keychain in `~/Library/Application Support/Logos`, and reuses it. Set `CODESIGN_IDENTITY` to pick a certificate yourself.
 
-When nothing focused takes text, for example the desktop or a button, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, or select part of the text. Press Esc or click the X at the top right to dismiss the card. Starting a new dictation also dismisses it. Logos asks macOS's Accessibility API what has keyboard focus, and when the API can't tell, Logos pastes as usual. If an app's text view isn't recognized and you get the card where you expected a paste, add the app's bundle ID to `alwaysPasteApps`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
+## Configuration reference
 
-The menu bar icon has **Settings…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**. Settings has three tabs:
+Logos keeps its files in `~/.config/logos/` and rereads each one when it changes:
 
-- **Config** covers the hotkey, models, API keys, and other common settings.
-- **Prompt** edits the cleanup prompt.
-- **Dictionary** edits the dictionary.
+- **`config.json`** holds settings and API keys, readable only by you. The **Config** tab writes only the setting you change, so settings you add by hand are kept.
+- **`prompt.md`** is the cleanup prompt.
+- **`dictionary.txt`** is your dictionary.
+- **`history.jsonl`** logs each dictation's raw and cleaned text, models, and timings.
+- **`context.d/`** holds files other apps write to tell Logos what to listen for.
 
-Changes save as you make them. A setting changed in the Config tab rewrites only that key in `config.json`, so settings you added by hand are kept.
-
-## Configure it
-
-Logos keeps four files in `~/.config/logos/`:
-
-- `config.json` holds settings and API keys. Logos creates it on first launch, readable only by you, and rereads it whenever it changes.
-- `prompt.md` is the cleanup prompt. Logos rereads it on every dictation.
-- `dictionary.txt` lists words and names to transcribe and spell exactly, one per line, such as people's names, product names, and jargon. Lines starting with `#` are ignored. An entry sets the spelling, not the capitalization: the cleanup model chooses letter case from context. To say how, add a note after `: `, such as `logos: "Logos" for the app or project, "logos" for the command`. Logos rereads it on every dictation and gives it to the transcription model and to the cleanup prompt; see below for how each uses it.
-- `history.jsonl` logs each dictation's raw transcript, cleaned text, models, and timings. Comparing raw and cleaned text here is the quickest way to tune the prompt.
-
-You name each model as `provider/model`, and put each provider's key under `keys`:
+Models are named `provider/model`, and each provider's key goes under `keys`. You can leave out any setting you don't change:
 
 ```json
 {
-  "transcription": { "model": "apple", "locale": "en-US" },
-  "cleanup": { "model": "anthropic/claude-opus-5-5", "effort": "low" },
-  "keys": { "anthropic": "sk-ant-...", "openai": "", "groq": "" }
+  "transcription": { "model": "groq/whisper-large-v3-turbo", "locale": "en-US" },
+  "cleanup": { "model": "anthropic/claude-haiku-5-5", "effort": "low" },
+  "keys": { "anthropic": "sk-ant-...", "groq": "gsk_..." }
 }
 ```
 
-You can leave out any setting you don't change. A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variable, such as `ANTHROPIC_API_KEY`, but apps opened from Finder don't see your shell's environment.
+A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variable, such as `ANTHROPIC_API_KEY`, but apps opened from Finder don't see your shell's environment.
 
-Transcription models:
-
-- `apple` runs on your Mac with Apple's newer speech model. It needs no key and is the default. The first dictation downloads the model for your `locale`. This model ignores `dictionary.txt`.
-- `apple/dictation` runs on your Mac with the model behind macOS keyboard dictation, and listens for the words in `dictionary.txt`. Compare the two on your own voice with the `raw` text in `history.jsonl`.
-- `openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe`, `groq/whisper-large-v3-turbo`, or any other model behind an OpenAI-compatible `/audio/transcriptions` endpoint. Logos sends these models `transcription.prompt` followed by the words in `dictionary.txt` as a hint.
-
-Cleanup models:
-
-- `anthropic/<model>`, such as `anthropic/claude-opus-5-5` (the default) or `anthropic/claude-haiku-5-5` for lower latency and cost. `effort` sets the model's effort level (`low` by default), and `maxTokens` caps the reply.
-- `openai/<model>`, `groq/<model>`, `openrouter/<vendor>/<model>`, or `ollama/<model>` for a model running locally in Ollama, which needs no key.
-
-Set `cleanup.enabled` to `false` to paste the raw transcript. If cleanup fails, Logos pastes the raw transcript and shows why.
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `hotkey` | `option` | The key to hold. A modifier alone, either side or one side (`option`, `rightOption`, `leftCommand`, `fn`), or any key with optional modifiers (`f13`, `ctrl+space`, `cmd+shift+d`). |
+| `minHoldSeconds` | `0.3` | The shortest hold that counts as a dictation. |
+| `inputDevice` | `builtIn` | The microphone: `builtIn`, `system` for macOS's default input, or a device's UID from the **Microphone** menu. |
+| `transcription.model` | `apple` | The speech model. |
+| `transcription.locale` | `en-US` | The language you speak. |
+| `transcription.prompt` | empty | A hint for server speech models, sent before your dictionary's words. |
+| `cleanup.enabled` | `true` | Clean up transcripts, or paste them raw. |
+| `cleanup.model` | `anthropic/claude-opus-5-5` | The cleanup model. |
+| `cleanup.effort` | `low` | Anthropic models' effort level. Empty uses the model's default. |
+| `cleanup.maxTokens` | `4096` | The longest reply from Anthropic models. |
+| `cleanup.extraBody` | empty | Merged into the cleanup request last, to set any API parameter, such as `{"temperature": 0}`. |
+| `providers` | empty | Extra providers, described below. |
+| `trailingSpace` | `true` | Add a space after each paste so dictations don't run together. |
+| `restoreClipboard` | `true` | Put your previous clipboard back after pasting. |
+| `showWhenNoTextField` | `true` | Show a card to copy from when nothing focused takes text. |
+| `alwaysPasteApps` | empty | Bundle IDs of apps that always get a paste. |
+| `readCursorContext` | `true` | Send the text around the cursor, the field's placeholder, the window title, and a browser's page URL to the cleanup model. Password fields are never read, and speech models never see any of it. |
+| `saveHistory` | `true` | Keep `history.jsonl`. |
 
 To add a provider, give it a name, an API style, and a base URL. `api` is `anthropic` for the Anthropic Messages API, or `openai` for anything OpenAI-compatible:
 
@@ -86,25 +188,16 @@ To add a provider, give it a name, an API style, and a base URL. `api` is `anthr
 }
 ```
 
-`cleanup.extraBody` is merged into the request body last, so it can set or override any API parameter, such as `{"temperature": 0}` for a model that accepts it.
+## Prompt reference
 
-Other settings:
+`prompt.md` is the system prompt, and the transcript follows as the user message inside `<transcript>` tags. Logos fills in these placeholders, in one pass, so text from a field or an app is never read as a placeholder:
 
-- `hotkey` is the key you hold to dictate (default `option`). In Settings, click the hotkey and press the key you want. In `config.json` it takes one of two forms:
-  - A modifier held on its own: `option`, `command`, `control`, `shift`, or `fn`, or one side, such as `rightOption` or `leftCommand`. Pressing any other key while you hold it cancels, so the modifier's shortcuts keep working.
-  - Any key, with optional modifiers: `f13`, `ctrl+space`, or `cmd+shift+d`. Logos keeps that key, its repeats, and its release from reaching other apps, so pick one you don't otherwise need. A letter or Space without ⌘ or ⌃ would stop typing it anywhere.
-- `minHoldSeconds` is the shortest hold that counts as a dictation (default `0.3`).
-- `inputDevice` is the microphone Logos records from. `builtIn`, the default, is the Mac's own microphone, even when macOS switches its default input to an audio interface or a display; macOS's choice is often a device with no microphone attached. `system` follows macOS's default input. A device's UID, which the Microphone menu in Settings writes for you, picks that device, and Logos falls back to the built-in microphone while it isn't connected.
-- `trailingSpace` adds a space after each paste so dictations don't run together (default `true`).
-- `restoreClipboard` puts your previous clipboard back after pasting (default `true`).
-- `showWhenNoTextField` shows the dictation in a card to copy from when nothing focused takes text (default `true`). Set it to `false` to always paste.
-- `alwaysPasteApps` lists bundle IDs of apps that always get a paste, such as `["com.mitchellh.ghostty"]` (default empty).
-- `readCursorContext` reads the text around the cursor, the field's placeholder, the window title, and a browser's page URL, and gives them to the cleanup model as `{{context}}` (default `true`). Password fields are never read, and transcription models never see any of it.
-- `saveHistory` turns `history.jsonl` on or off (default `true`).
-
-## The prompt
-
-`prompt.md` is sent as the system prompt, and the transcript follows as the user message inside `<transcript>` tags. `{{app}}` in the prompt becomes the name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. `{{dictionary}}` becomes the words in `dictionary.txt` as a bulleted list, or `(none)`. The default prompt asks the model to spell those words exactly, which also fixes mishearings the transcription model makes. If your prompt leaves `{{dictionary}}` out, the cleanup model doesn't see the dictionary. `{{context}}` becomes what surrounds the cursor, from `readCursorContext`, and hints from other apps, described below, or `(none)`. The default prompt tells the model to use it only as context, for example to continue a sentence in lowercase, and never to repeat it. If the prompt contains `{{transcript}}`, Logos sends the whole prompt as the user message with the transcript in that spot, and no system prompt. Placeholders are filled in a single pass, so text from a field or an app is never treated as a placeholder.
+| Placeholder | Becomes |
+| --- | --- |
+| `{{app}}` | The name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. |
+| `{{dictionary}}` | Your dictionary as a bulleted list, notes included, or `(none)`. Leave it out and the cleanup model doesn't see your dictionary. |
+| `{{context}}` | The text around the cursor and hints from other apps, or `(none)`. The default prompt tells the model to use it only as context and never to repeat it. |
+| `{{transcript}}` | The transcript. When the prompt contains it, Logos sends the whole prompt as the user message, with no system prompt. |
 
 ## Context from other apps
 
@@ -121,36 +214,33 @@ Apps and tools can tell Logos what to listen for by writing JSON files to `~/.co
 
 Every field is optional:
 
-- `apps` lists bundle IDs of the apps the file applies to. Without it, the file applies to every app. A tool that runs in a terminal should list terminal apps, since the terminal is the app in front.
-- `words` uses the same format as `dictionary.txt` lines, notes included. Your own dictionary wins when both list a word.
-- `prompt` is a hint for the cleanup model, labeled with the file's name, such as `From projector:`. Logos uses the first 2,000 characters.
-- `expires` is an ISO 8601 time after which Logos ignores the file, so context from a closed session doesn't linger.
+- **`apps`** lists the bundle IDs of the apps the file applies to. Without it, the file applies to every app. A tool that runs in a terminal should list terminal apps, since the terminal is the app in front.
+- **`words`** uses the same format as dictionary lines, notes included. Your own dictionary wins when both list a word.
+- **`prompt`** is a hint for the cleanup model, labeled with the file's name, such as `From projector:`. Logos uses the first 2,000 characters.
+- **`expires`** is an ISO 8601 time after which Logos ignores the file, so context from a closed session doesn't linger.
 
 Name the file after your tool, such as `projector.json`, and write it atomically: write a temporary file, then rename it. Logos skips files that aren't valid JSON.
 
 ## The logos command
 
-`logos` is the app's own binary, so it's always the same version as the app. `logos help` lists its commands.
+`logos` is the app's own binary, so it's always the same version as the app. `logos help` lists its commands:
 
-`logos transcribe` runs an audio file through the same pipeline as a dictation and prints the result instead of pasting it, which makes prompt and model changes quick to try:
+- **`logos transcribe <file>`** runs an audio file through transcription and cleanup and prints the result. Add `--no-cleanup` to stop after transcription, and `--app <name>` to fill in `{{app}}`. Set `LOGOS_CONFIG_DIR` to use a config folder other than `~/.config/logos`.
+- **`logos update`** builds and installs the newest release. `--check` only reports whether one is out.
+- **`logos version`** prints the installed version.
 
-```sh
-say -o /tmp/test.wav --data-format=LEI16@16000 "um so I think we should meet at three, no wait, at four"
-logos transcribe /tmp/test.wav --app Slack
-```
-
-It prints the raw and cleaned text and how long they took. Add `--no-cleanup` to stop after transcription. Set `LOGOS_CONFIG_DIR` to try a config folder other than `~/.config/logos`.
+Set `LOGOS_OFFLINE` to stop both the app and the command from checking for releases.
 
 ## Develop
 
-Run the tests with `swift test`. `./scripts/build.sh` builds `build/Logos.app` without installing it, and `./install.sh` builds and installs your checkout.
+Clone this repository and run the tests with `swift test`. `./scripts/build.sh` builds `build/Logos.app` without installing it, and `./install.sh` builds and installs your checkout. `./scripts/artwork.sh` redraws the app icon and the site's images from the glyph in `Sources/Logos/Glyph.swift`.
 
 ## Release
 
 The version lives in one place: `CFBundleShortVersionString` in `Resources/Info.plist`. A release is a tag, `vX.Y.Z`, with no built files, because each Mac builds the source itself.
 
 1. Run the **Release** workflow from `main` under Actions, choosing patch, minor, or major. It opens a "Release X.Y.Z" pull request that bumps the version.
-2. Merge that pull request. The workflow then tags `vX.Y.Z` and publishes a GitHub release with generated notes, and `logos update` installs it everywhere.
+2. Merge that pull request. The workflow tags `vX.Y.Z` and publishes a GitHub release with generated notes, and `logos update` installs it everywhere.
 
 The workflow needs **Allow GitHub Actions to create and approve pull requests** turned on under Settings → Actions → General.
 

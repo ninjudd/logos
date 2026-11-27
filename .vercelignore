@@ -1,0 +1,5 @@
+# The site is web/ plus install.sh, which the build copies into it.
+/*
+!/web
+!/install.sh
+!/vercel.json

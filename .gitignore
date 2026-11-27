@@ -2,3 +2,6 @@
 build/
 .claude/worktrees/
 .DS_Store
+.vercel/
+.env*
+web/install.sh

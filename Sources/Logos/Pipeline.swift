@@ -9,7 +9,7 @@ enum Pipeline {
         var warning: String?
     }
 
-    static func run(audio: URL, config: Config, prompt: String, vocabulary: [String], app: String,
+    static func run(audio: URL, config: Config, prompt: String, vocabulary: [Vocabulary.Entry], app: String,
                     stage: @escaping (String) -> Void = { _ in }) async throws -> Outcome {
         let started = Date()
         stage("Transcribing…")

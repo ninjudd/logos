@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var chain: Task<Void, Never>?
     private var lastText: String?
     private var trustTimer: Timer?
+    private var availableUpdate: String?
+    private var updateTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ConfigStore.shared.ensureFiles()
@@ -47,6 +49,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let transcription = ConfigStore.shared.current.transcription
         Task { await Transcriber.prepare(transcription) }
         if let error = ConfigStore.shared.lastError { overlay.flash(error) }
+
+        checkForUpdate()
+        // The cache limits this to one request to GitHub a day.
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkForUpdate() }
+        }
+    }
+
+    // MARK: Updates
+
+    private func checkForUpdate() {
+        Task { @MainActor in
+            guard let tag = await Updater.latestTagCached(),
+                  Updater.isNewer(tag, than: Updater.installedVersion) else { return }
+            availableUpdate = tag
+        }
+    }
+
+    /// Runs the release's installer in the background. It builds the new version,
+    /// replaces this app, and starts it, so this process ends when it succeeds.
+    @objc private func installUpdate() {
+        guard let tag = availableUpdate else { return }
+        overlay.flash("Building Logos \(tag). It restarts when the build finishes.", seconds: 6, success: true)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let installer = try await Updater.installer(tag: tag)
+                let process = Updater.installProcess(installer: installer, tag: tag)
+                FileManager.default.createFile(atPath: Paths.updateLog.path, contents: nil)
+                let log = try FileHandle(forWritingTo: Paths.updateLog)
+                process.standardOutput = log
+                process.standardError = log
+                process.terminationHandler = { [weak self] process in
+                    guard process.terminationStatus != 0 else { return }
+                    Task { @MainActor in self?.overlay.flash("Update failed. See \(Paths.updateLog.path)") }
+                }
+                try process.run()
+            } catch {
+                overlay.flash("Update failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: Recording
@@ -208,7 +251,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .leftOption: "Left Option"
         case .rightOption: "Right Option"
         }
+        menu.addItem(NSMenuItem(title: "Logos \(Updater.installedVersion)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Hold \(key) to dictate", action: nil, keyEquivalent: ""))
+        if let availableUpdate {
+            menu.addItem(item("Update to \(availableUpdate)…", #selector(installUpdate)))
+        }
         if let error = ConfigStore.shared.lastError {
             menu.addItem(NSMenuItem(title: "⚠︎ \(error)", action: nil, keyEquivalent: ""))
         }

@@ -102,6 +102,7 @@ enum Paths {
     static let config = dir.appending(path: "config.json")
     static let prompt = dir.appending(path: "prompt.md")
     static let history = dir.appending(path: "history.jsonl")
+    static let updateLog = dir.appending(path: "update.log")
 }
 
 final class ConfigStore {

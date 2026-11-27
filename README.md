@@ -45,7 +45,7 @@ Logos keeps four files in `~/.config/logos/`:
 
 - `config.json` holds settings and API keys. Logos creates it on first launch, readable only by you, and rereads it whenever it changes.
 - `prompt.md` is the cleanup prompt. Logos rereads it on every dictation.
-- `dictionary.txt` lists words and names to transcribe and spell exactly, one per line, such as people's names, product names, and jargon. Lines starting with `#` are ignored. Logos rereads it on every dictation and gives it to the transcription model and to the cleanup prompt; see below for how each uses it.
+- `dictionary.txt` lists words and names to transcribe and spell exactly, one per line, such as people's names, product names, and jargon. Lines starting with `#` are ignored. An entry sets the spelling, not the capitalization: the cleanup model chooses letter case from context. To say how, add a note after `: `, such as `logos: "Logos" for the app or project, "logos" for the command`. Logos rereads it on every dictation and gives it to the transcription model and to the cleanup prompt; see below for how each uses it.
 - `history.jsonl` logs each dictation's raw transcript, cleaned text, models, and timings. Comparing raw and cleaned text here is the quickest way to tune the prompt.
 
 You name each model as `provider/model`, and put each provider's key under `keys`:

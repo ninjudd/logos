@@ -8,26 +8,24 @@ enum Cleaner {
     ]
 
     static func clean(_ transcript: String, prompt: String, app: String, config: Config) async throws -> String {
-        let rendered = prompt.replacingOccurrences(of: "{{app}}", with: app)
-        // A prompt with {{transcript}} is sent whole as the user message, with no
-        // system prompt. Otherwise the prompt is the system prompt and the
-        // transcript is the user message.
-        let system: String?
-        let user: String
-        if rendered.contains("{{transcript}}") {
-            system = nil
-            user = rendered.replacingOccurrences(of: "{{transcript}}", with: transcript)
-        } else {
-            system = rendered
-            user = "<transcript>\n\(transcript)\n</transcript>"
-        }
-
+        let (system, user) = messages(prompt: prompt, transcript: transcript, app: app)
         let model = try config.resolve(config.cleanup.model)
         switch model.api {
         case "anthropic": return try await anthropic(system: system, user: user, model: model, settings: config.cleanup)
         case "openai": return try await openAI(system: system, user: user, model: model, settings: config.cleanup)
         default: throw LogosError("Provider \"\(model.provider)\" has unknown api \"\(model.api)\" (use \"anthropic\" or \"openai\")")
         }
+    }
+
+    /// A prompt with {{transcript}} is sent whole as the user message, with no
+    /// system prompt. Otherwise the prompt is the system prompt and the
+    /// transcript is the user message.
+    static func messages(prompt: String, transcript: String, app: String) -> (system: String?, user: String) {
+        let rendered = prompt.replacingOccurrences(of: "{{app}}", with: app)
+        if rendered.contains("{{transcript}}") {
+            return (nil, rendered.replacingOccurrences(of: "{{transcript}}", with: transcript))
+        }
+        return (rendered, "<transcript>\n\(transcript)\n</transcript>")
     }
 
     private static func anthropic(system: String?, user: String, model: ResolvedModel, settings: Config.Cleanup) async throws -> String {

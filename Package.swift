@@ -10,5 +10,11 @@ let package = Package(
             path: "Sources/Logos",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(
+            name: "LogosTests",
+            dependencies: ["Logos"],
+            path: "Tests/LogosTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

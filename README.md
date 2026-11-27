@@ -90,3 +90,7 @@ say -o /tmp/test.wav --data-format=LEI16@16000 "um so I think we should meet at 
 ```
 
 It prints the raw and cleaned text and how long they took. Add `--no-cleanup` to stop after transcription. Set `LOGOS_CONFIG_DIR` to try a config folder other than `~/.config/logos`.
+
+## Develop
+
+Run the tests with `swift test`. Build the app with `./scripts/build.sh`, which leaves it in `build/Logos.app` without installing it.

@@ -144,13 +144,7 @@ final class ConfigStore {
                 lastError = nil
                 return
             }
-            let user = try JSONSerialization.jsonObject(with: data)
-            guard let userDict = user as? [String: Any] else {
-                throw LogosError("config.json must be a JSON object")
-            }
-            let defaults = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Config())) as! [String: Any]
-            let merged = deepMerge(defaults, userDict)
-            cached = try JSONDecoder().decode(Config.self, from: JSONSerialization.data(withJSONObject: merged))
+            cached = try Config.decode(data)
             lastError = nil
         } catch {
             // Keep the last good config so a typo mid-edit doesn't break dictation.
@@ -158,8 +152,20 @@ final class ConfigStore {
             NSLog("Logos: %@", lastError!)
         }
     }
+}
 
-    private func deepMerge(_ base: [String: Any], _ over: [String: Any]) -> [String: Any] {
+extension Config {
+    /// Decodes a config file, filling in every key it leaves out with the default.
+    static func decode(_ data: Data) throws -> Config {
+        guard let user = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw LogosError("config.json must be a JSON object")
+        }
+        let defaults = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Config())) as! [String: Any]
+        let merged = deepMerge(defaults, user)
+        return try JSONDecoder().decode(Config.self, from: JSONSerialization.data(withJSONObject: merged))
+    }
+
+    private static func deepMerge(_ base: [String: Any], _ over: [String: Any]) -> [String: Any] {
         var result = base
         for (key, value) in over {
             if let b = base[key] as? [String: Any], let o = value as? [String: Any] {

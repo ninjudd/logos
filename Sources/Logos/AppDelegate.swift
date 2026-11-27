@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Starts and stops the microphone off the main thread. Core Audio can stall
     /// while devices change, such as when a display or audio interface connects,
     /// and Logos must stay responsive when it does.
-    private var audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+    private var audioQueue = AppDelegate.makeAudioQueue()
     private var microphone = MicrophoneStart()
     private var pressedAt = Date()
     private var targetApp = ""
@@ -166,10 +166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// stuck, so later recordings use a fresh one.
     private func microphoneTimedOut(_ id: Int) {
         guard microphone.timedOut(id) else { return }
-        audioQueue = DispatchQueue(label: "com.ninjudd.logos.audio")
+        audioQueue = Self.makeAudioQueue()
         _ = endRecording()
         overlay.flash("The microphone didn't respond. Try again, or choose another microphone in Settings.")
         NSLog("Logos: the microphone took more than 3 seconds to start; abandoned it")
+    }
+
+    /// Every audio queue Logos uses, including the fresh one after a stall, carries
+    /// the same label, so they read as one queue in a debugger or crash log.
+    private nonisolated static func makeAudioQueue() -> DispatchQueue {
+        DispatchQueue(label: "com.ninjudd.logos.audio")
     }
 
     private func discard(_ recorder: Recorder) {
@@ -177,14 +183,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Stops `recorder` on the audio queue and waits, so its file is complete.
-    private func stop(_ recorder: Recorder) async {
-        let queue = audioQueue
-        await withCheckedContinuation { continuation in
-            queue.async {
-                recorder.stop()
-                continuation.resume()
-            }
+    /// Returns false when the stop takes more than 3 seconds. Its thread may stay
+    /// stuck, so later recordings use a fresh one.
+    private func stop(_ recorder: Recorder) async -> Bool {
+        guard await audioQueue.run(within: 3, { recorder.stop() }) else {
+            audioQueue = Self.makeAudioQueue()
+            NSLog("Logos: the microphone took more than 3 seconds to stop; dropped the dictation")
+            return false
         }
+        return true
     }
 
     private func tick() {
@@ -240,18 +247,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshOverlay()
 
         chain = Task { @MainActor [weak self] in
-            await self?.stop(r)
+            let stopped = await self?.stop(r) ?? false
             let result: Result<Pipeline.Outcome, Error>
-            do {
-                result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,
-                                                         vocabulary: vocabulary, app: app, context: context) { stage in
-                    Task { @MainActor in
-                        self?.stageLabel = stage
-                        self?.refreshOverlay()
-                    }
-                })
-            } catch {
-                result = .failure(error)
+            if stopped {
+                do {
+                    result = .success(try await Pipeline.run(audio: audio, config: config, prompt: prompt,
+                                                             vocabulary: vocabulary, app: app, context: context) { stage in
+                        Task { @MainActor in
+                            self?.stageLabel = stage
+                            self?.refreshOverlay()
+                        }
+                    })
+                } catch {
+                    result = .failure(error)
+                }
+            } else {
+                // The file may be incomplete, so it isn't worth transcribing.
+                result = .failure(LogosError("The microphone didn't stop in time, so that dictation was dropped. Try again."))
             }
             try? FileManager.default.removeItem(at: audio)
             await previous?.value

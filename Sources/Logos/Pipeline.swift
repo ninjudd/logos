@@ -10,6 +10,7 @@ enum Pipeline {
     }
 
     static func run(audio: URL, config: Config, prompt: String, vocabulary: [Vocabulary.Entry], app: String,
+                    context: AppContext = AppContext(),
                     stage: @escaping (String) -> Void = { _ in }) async throws -> Outcome {
         let started = Date()
         stage("Transcribing…")
@@ -22,7 +23,8 @@ enum Pipeline {
         } else if config.cleanup.enabled {
             stage("Cleaning up…")
             do {
-                outcome.text = try await Cleaner.clean(raw, prompt: prompt, app: app, vocabulary: vocabulary, config: config)
+                outcome.text = try await Cleaner.clean(raw, prompt: prompt, app: app, vocabulary: vocabulary,
+                                                       context: context, config: config)
             } catch {
                 outcome.warning = "Cleanup failed, pasted raw text: \(error.localizedDescription)"
             }

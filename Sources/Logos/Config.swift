@@ -58,6 +58,10 @@ struct Config: Codable {
     /// Bundle IDs of apps that always get a paste, for apps whose text views
     /// Accessibility doesn't recognize, such as "com.mitchellh.ghostty".
     var alwaysPasteApps: [String] = []
+    /// Read the focused field's surrounding text, placeholder, window title, and
+    /// page URL, and give them to the cleanup model as {{context}}. Transcription
+    /// models never see them.
+    var readCursorContext = true
     /// Append raw and cleaned text to ~/.config/logos/history.jsonl.
     var saveHistory = true
 
@@ -102,6 +106,7 @@ enum Paths {
     static let config = dir.appending(path: "config.json")
     static let prompt = dir.appending(path: "prompt.md")
     static let dictionary = dir.appending(path: "dictionary.txt")
+    static let contextDir = dir.appending(path: "context.d")
     static let history = dir.appending(path: "history.jsonl")
     static let updateLog = dir.appending(path: "update.log")
 }
@@ -151,6 +156,8 @@ final class ConfigStore {
         if !fm.fileExists(atPath: Paths.dictionary.path) {
             try? Vocabulary.defaultText.write(to: Paths.dictionary, atomically: true, encoding: .utf8)
         }
+        // Apps that provide context write their files here.
+        try? fm.createDirectory(at: Paths.contextDir, withIntermediateDirectories: true)
     }
 
     private func load() {
@@ -257,6 +264,9 @@ enum DefaultPrompt {
     Spell these words and names as written here. Choose their letter case from context: capitalize a name, product, or project, and keep a command, file name, or identifier as it's typed. Follow any note after a word.
     {{dictionary}}
 
+    Here is what surrounds the cursor. It's context only: never repeat it or include it in your output. When the text before the cursor ends mid-sentence, continue that sentence, starting with a lowercase letter unless the word is a name.
+    {{context}}
+
     """
 }
 
@@ -291,6 +301,13 @@ enum Vocabulary {
             guard !term.isEmpty, seen.insert(term.lowercased()).inserted else { return nil }
             return Entry(term: term, note: note.isEmpty ? nil : note)
         }
+    }
+
+    /// Your dictionary followed by words from elsewhere, such as context.d files.
+    /// A word you list wins over the same word from an app, in any case.
+    static func merge(_ mine: [Entry], _ others: [Entry]) -> [Entry] {
+        var seen = Set(mine.map { $0.term.lowercased() })
+        return mine + others.filter { seen.insert($0.term.lowercased()).inserted }
     }
 
     /// The list as it appears in the cleanup prompt, notes included.

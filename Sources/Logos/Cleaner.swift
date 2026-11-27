@@ -8,8 +8,9 @@ enum Cleaner {
     ]
 
     static func clean(_ transcript: String, prompt: String, app: String, vocabulary: [Vocabulary.Entry],
-                      config: Config) async throws -> String {
-        let (system, user) = messages(prompt: prompt, transcript: transcript, app: app, vocabulary: vocabulary)
+                      context: AppContext, config: Config) async throws -> String {
+        let (system, user) = messages(prompt: prompt, transcript: transcript, app: app, vocabulary: vocabulary,
+                                      context: context)
         let model = try config.resolve(config.cleanup.model)
         switch model.api {
         case "anthropic": return try await anthropic(system: system, user: user, model: model, settings: config.cleanup)
@@ -20,17 +21,34 @@ enum Cleaner {
 
     /// A prompt with {{transcript}} is sent whole as the user message, with no
     /// system prompt. Otherwise the prompt is the system prompt and the
-    /// transcript is the user message. {{app}} and {{dictionary}} are filled in
-    /// first, so the transcript's own text is never substituted.
+    /// transcript is the user message. Placeholders are filled in one pass, so
+    /// text that came from you, a field, or an app is never substituted again.
     static func messages(prompt: String, transcript: String, app: String,
-                         vocabulary: [Vocabulary.Entry] = []) -> (system: String?, user: String) {
-        let rendered = prompt
-            .replacingOccurrences(of: "{{app}}", with: app)
-            .replacingOccurrences(of: "{{dictionary}}", with: Vocabulary.promptList(vocabulary))
-        if rendered.contains("{{transcript}}") {
-            return (nil, rendered.replacingOccurrences(of: "{{transcript}}", with: transcript))
+                         vocabulary: [Vocabulary.Entry] = [],
+                         context: AppContext = AppContext()) -> (system: String?, user: String) {
+        var values = ["app": app, "dictionary": Vocabulary.promptList(vocabulary), "context": context.render()]
+        let inline = prompt.contains("{{transcript}}")
+        if inline { values["transcript"] = transcript }
+        let rendered = fill(prompt, values)
+        return inline ? (nil, rendered) : (rendered, "<transcript>\n\(transcript)\n</transcript>")
+    }
+
+    /// Replaces each {{name}} that has a value, leaving unknown ones as they are.
+    static func fill(_ template: String, _ values: [String: String]) -> String {
+        var output = ""
+        var rest = template[...]
+        while let open = rest.range(of: "{{") {
+            output += rest[..<open.lowerBound]
+            let after = rest[open.upperBound...]
+            if let close = after.range(of: "}}"), let value = values[String(after[..<close.lowerBound])] {
+                output += value
+                rest = after[close.upperBound...]
+            } else {
+                output += "{{"
+                rest = after
+            }
         }
-        return (rendered, "<transcript>\n\(transcript)\n</transcript>")
+        return output + rest
     }
 
     private static func anthropic(system: String?, user: String, model: ResolvedModel, settings: Config.Cleanup) async throws -> String {

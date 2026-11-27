@@ -155,6 +155,8 @@ private struct ConfigTab: View {
             }
             Section("Cleanup") {
                 Toggle("Clean up transcripts", isOn: model.binding(\.cleanup.enabled, ["cleanup", "enabled"]))
+                Toggle("Send the text around the cursor to the cleanup model",
+                       isOn: model.binding(\.readCursorContext, ["readCursorContext"]))
                 ModelField(title: "Model", value: model.binding(\.cleanup.model, ["cleanup", "model"]),
                            suggestions: Self.cleanupModels)
                 Picker("Effort (Anthropic)", selection: model.binding(\.cleanup.effort, ["cleanup", "effort"])) {

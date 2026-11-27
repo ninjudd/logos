@@ -116,9 +116,12 @@ enum CLI {
         let start = Date()
         let status: Int32
         do {
+            // No app is focused for a file, so only context files that name no apps apply.
+            let provided = ContextFiles.load(bundleID: nil)
             let outcome = try await Pipeline.run(audio: URL(fileURLWithPath: file), config: config,
                                                  prompt: ConfigStore.shared.prompt,
-                                                 vocabulary: ConfigStore.shared.dictionary, app: app) {
+                                                 vocabulary: Vocabulary.merge(ConfigStore.shared.dictionary, provided.words),
+                                                 app: app, context: AppContext(hints: provided.hints)) {
                 fputs("\($0)\n", stderr)
             }
             print("raw:   \(outcome.raw)")

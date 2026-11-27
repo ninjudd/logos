@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Logos</string>
+	<key>CFBundleDisplayName</key>
+	<string>Logos</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.ninjudd.logos</string>
+	<key>CFBundleExecutable</key>
+	<string>Logos</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Logos records your voice while you hold the dictation key.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Logos transcribes your dictation on this Mac.</string>
+</dict>
+</plist>

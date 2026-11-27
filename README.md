@@ -31,7 +31,7 @@ This builds and installs the newest release, then restarts the app. `logos updat
 
 ## Use it
 
-Hold Option, talk, and release. A small pill at the bottom of the screen shows the frequencies in your voice while you hold the key, with low pitches on the left and high on the right. Each bar jumps up with sound in its range and fades when the sound stops. Then a spinner shows while Logos transcribes and cleans up. Taps shorter than `minHoldSeconds` are ignored. Pressing any other key or clicking while you hold Option cancels the recording, so Option shortcuts and Option-typed characters keep working.
+Hold Option, or whichever key you set as the hotkey, talk, and release. A small pill at the bottom of the screen shows the frequencies in your voice while you hold the key, with low pitches on the left and high on the right. Each bar jumps up with sound in its range and fades when the sound stops. Then a spinner shows while Logos transcribes and cleans up. Taps shorter than `minHoldSeconds` are ignored. Pressing any other key or clicking while you hold Option cancels the recording, so Option shortcuts and Option-typed characters keep working.
 
 When nothing focused takes text, for example the desktop or a button, Logos shows the dictation in a card instead of pasting it into nothing. Click the copy icon beside the text, or select part of the text. Press Esc or click the X at the top right to dismiss the card. Starting a new dictation also dismisses it. Logos asks macOS's Accessibility API what has keyboard focus, and when the API can't tell, Logos pastes as usual. If an app's text view isn't recognized and you get the card where you expected a paste, add the app's bundle ID to `alwaysPasteApps`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
 
@@ -90,7 +90,9 @@ To add a provider, give it a name, an API style, and a base URL. `api` is `anthr
 
 Other settings:
 
-- `hotkey` is `option` (either key), `leftOption`, or `rightOption`.
+- `hotkey` is the key you hold to dictate (default `option`). In Settings, click the hotkey and press the key you want. In `config.json` it takes one of two forms:
+  - A modifier held on its own: `option`, `command`, `control`, `shift`, or `fn`, or one side, such as `rightOption` or `leftCommand`. Pressing any other key while you hold it cancels, so the modifier's shortcuts keep working.
+  - Any key, with optional modifiers: `f13`, `ctrl+space`, or `cmd+shift+d`. Logos keeps that key, its repeats, and its release from reaching other apps, so pick one you don't otherwise need. A letter or Space without ⌘ or ⌃ would stop typing it anywhere.
 - `minHoldSeconds` is the shortest hold that counts as a dictation (default `0.3`).
 - `trailingSpace` adds a space after each paste so dictations don't run together (default `true`).
 - `restoreClipboard` puts your previous clipboard back after pasting (default `true`).

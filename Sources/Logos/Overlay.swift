@@ -83,22 +83,23 @@ private struct ResultCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ScrollView {
-                Text(text)
-                    .font(.system(size: OverlayController.resultFontSize))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: OverlayController.resultIconGap) {
+                ScrollView {
+                    Text(text)
+                        .font(.system(size: OverlayController.resultFontSize))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: textHeight)
+                iconButton("xmark", label: "Close", action: close)
             }
-            .frame(height: textHeight)
             HStack {
                 Text("No text field to paste into")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.6))
                 Spacer()
-                Button("Close", action: close)
-                Button("Copy", action: copy).keyboardShortcut(.defaultAction)
+                iconButton("square.on.square", label: "Copy", action: copy)
             }
-            .controlSize(.small)
         }
         .foregroundStyle(.white)
         .padding(OverlayController.resultPadding)
@@ -106,6 +107,19 @@ private struct ResultCard: View {
         .background(RoundedRectangle(cornerRadius: 14).fill(.black.opacity(0.88)))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.18)))
         .environment(\.colorScheme, .dark)
+    }
+
+    private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: OverlayController.resultIconSize, height: OverlayController.resultIconSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white.opacity(0.8))
+        .help(label)
+        .accessibilityLabel(label)
     }
 }
 
@@ -119,11 +133,13 @@ private final class ClickThroughHostingView<Content: View>: NSHostingView<Conten
 final class OverlayController {
     static let resultFontSize: CGFloat = 13
     static let resultPadding: CGFloat = 14
+    static let resultIconSize: CGFloat = 20
+    static let resultIconGap: CGFloat = 8
     private static let pillSize = NSSize(width: 460, height: 60)
     private static let resultWidth: CGFloat = 440
     private static let resultMaxTextHeight: CGFloat = 160
-    /// The card's button row and the gap above it.
-    private static let resultChrome: CGFloat = 10 + 24
+    /// The card's bottom row and the gap above it.
+    private static let resultChrome: CGFloat = 10 + resultIconSize
 
     let model = OverlayModel()
     private let panel: NSPanel
@@ -204,7 +220,8 @@ final class OverlayController {
     }
 
     private static func textHeight(_ text: String) -> CGFloat {
-        let width = resultWidth - 2 * resultPadding
+        // The close button sits beside the text.
+        let width = resultWidth - 2 * resultPadding - resultIconGap - resultIconSize
         let bounds = (text as NSString).boundingRect(
             with: NSSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],

@@ -1,0 +1,4 @@
+.build/
+build/
+.claude/worktrees/
+.DS_Store

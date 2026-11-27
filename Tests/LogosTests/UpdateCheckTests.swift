@@ -41,16 +41,30 @@ import Testing
     // the automatic check.
     @Test func checkIgnoresAndRefreshesTheCache() async {
         defer { removeCache() }
-        #expect(await Updater.latestTagCached(cache: cache) { "v0.2.0" } == "v0.2.0")
+        #expect(await Updater.latestTagCached(cache: cache, offline: false) { "v0.2.0" } == "v0.2.0")
 
         let result = await Updater.check(installed: "0.2.0", cache: cache) { "v0.3.0" }
         #expect(result == .newer("v0.3.0"))
 
-        let cached = await Updater.latestTagCached(cache: cache) {
+        let cached = await Updater.latestTagCached(cache: cache, offline: false) {
             Issue.record("The cache should hold the manual check's answer")
             return "v0.0.0"
         }
         #expect(cached == "v0.3.0")
+    }
+
+    // Catches LOGOS_OFFLINE no longer stopping the automatic check, which would
+    // ask GitHub and offer an update anyway.
+    @Test func cachedCheckAsksNothingWhenOffline() async {
+        defer { removeCache() }
+        var asked = false
+        let tag = await Updater.latestTagCached(cache: cache, offline: true) {
+            asked = true
+            return "v0.3.0"
+        }
+        #expect(tag == nil)
+        #expect(!asked)
+        #expect(!FileManager.default.fileExists(atPath: cache.path))
     }
 
     @Test func checkReportsTheLatestVersionWhenUpToDate() async {

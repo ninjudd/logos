@@ -116,10 +116,12 @@ enum Updater {
     }
 
     /// The newest release's tag, asking GitHub at most once a day. Nil when
-    /// offline, when LOGOS_OFFLINE is set, or when GitHub can't be reached.
+    /// `offline`, which LOGOS_OFFLINE sets by default, or when GitHub can't be
+    /// reached.
     static func latestTagCached(maxAge: TimeInterval = 86_400, cache: URL = cacheFile,
+                                offline: Bool = ProcessInfo.processInfo.environment["LOGOS_OFFLINE"] != nil,
                                 fetch: () async throws -> String = latestTag) async -> String? {
-        guard ProcessInfo.processInfo.environment["LOGOS_OFFLINE"] == nil else { return nil }
+        guard !offline else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         if let data = try? Data(contentsOf: cache),

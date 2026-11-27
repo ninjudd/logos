@@ -367,21 +367,40 @@ final class ContactsIndex: @unchecked Sendable {
     private var mine: [String] = []
     private var observer: NSObjectProtocol?
 
-    var people: [People.Person] { lock.withLock { loaded } }
+    /// Set while contact matching is on, so a read that finishes after it's
+    /// turned off doesn't load the contacts again.
+    private var enabled = false
+    private let authorized: @Sendable () -> Bool
+
+    init(authorized: @escaping @Sendable () -> Bool = { ContactsIndex.isAuthorized }) {
+        self.authorized = authorized
+    }
+
+    /// Your contacts as last read. None once Contacts access is turned off in
+    /// System Settings, from the next dictation on, though Logos keeps running.
+    var people: [People.Person] { authorized() ? lock.withLock { loaded } : [] }
     /// The email addresses on your own card, the one Contacts marks as you.
-    var ownEmails: [String] { lock.withLock { mine } }
+    /// None once Contacts access is turned off.
+    var ownEmails: [String] { authorized() ? lock.withLock { mine } : [] }
 
     static var isAuthorized: Bool {
         CNContactStore.authorizationStatus(for: .contacts) == .authorized
     }
 
+    /// Whether Contacts access was refused, in System Settings or by a policy.
+    static var isDenied: Bool {
+        let status = CNContactStore.authorizationStatus(for: .contacts)
+        return status == .denied || status == .restricted
+    }
+
     /// Asks for Contacts access if needed, then loads. Returns whether access is granted.
     @discardableResult
     func enable() async -> Bool {
-        if !Self.isAuthorized {
+        if !authorized() {
             let granted = (try? await CNContactStore().requestAccess(for: .contacts)) ?? false
             guard granted else { return false }
         }
+        lock.withLock { enabled = true }
         reload()
         if observer == nil {
             observer = NotificationCenter.default.addObserver(forName: .CNContactStoreDidChange, object: nil, queue: nil) { [weak self] _ in
@@ -391,9 +410,23 @@ final class ContactsIndex: @unchecked Sendable {
         return true
     }
 
-    /// Reads every contact's name, nickname, and email addresses, off the main thread.
+    /// Stops following changes to your contacts and forgets them, for when
+    /// contact matching is turned off.
+    func disable() {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+        lock.withLock { enabled = false }
+        use([], ownEmails: [])
+    }
+
+    /// Reads every contact's name and nickname, and the email addresses on
+    /// your own card, off the main thread. Forgets what it read before once
+    /// Contacts access is gone.
     func reload() {
-        guard Self.isAuthorized else { return }
+        guard authorized() else {
+            use([], ownEmails: [])
+            return
+        }
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             let store = CNContactStore()
@@ -406,10 +439,15 @@ final class ContactsIndex: @unchecked Sendable {
             }
             let me = try? store.unifiedMeContactWithKeys(toFetch: [CNContactEmailAddressesKey as CNKeyDescriptor])
             let ownEmails = me?.emailAddresses.map { String($0.value) } ?? []
-            self.lock.withLock {
-                self.loaded = people
-                self.mine = ownEmails
-            }
+            if self.lock.withLock({ self.enabled }) { self.use(people, ownEmails: ownEmails) }
+        }
+    }
+
+    /// Replaces the contacts and own addresses that dictations match against.
+    func use(_ people: [People.Person], ownEmails: [String]) {
+        lock.withLock {
+            loaded = people
+            mine = ownEmails
         }
     }
 }

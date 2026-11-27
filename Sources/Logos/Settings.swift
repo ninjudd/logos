@@ -208,13 +208,17 @@ private struct ContactsToggle: View {
                 get: { isOn },
                 set: { on in
                     isOn = on
-                    guard on else { return }
+                    guard on else {
+                        ContactsIndex.shared.disable()
+                        return
+                    }
                     Task { @MainActor in
                         denied = !(await ContactsIndex.shared.enable())
                         if denied { isOn = false }
                     }
                 }))
-            if denied {
+            // Access can be turned off in System Settings while the toggle is on.
+            if denied || (isOn && ContactsIndex.isDenied) {
                 Text("Logos doesn't have Contacts access. Turn on Logos in System Settings → Privacy & Security → Contacts, then try again.")
                     .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             } else {

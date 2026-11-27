@@ -88,6 +88,30 @@ import Testing
         #expect(People.mentioned(in: "Then Alex said hi.", among: alexes).count == People.singleNameLimit)
     }
 
+    private final class Access: @unchecked Sendable {
+        var granted = true
+    }
+
+    // Catches contacts read before Contacts access was turned off still being
+    // matched and sent, along with your card's addresses, until Logos quits.
+    @Test func turningOffContactsAccessStopsUsingTheLoadedContacts() {
+        let access = Access()
+        let index = ContactsIndex(authorized: { access.granted })
+        index.use([jonathan], ownEmails: ["me@example.com"])
+        access.granted = false
+        #expect(index.people.isEmpty)
+        #expect(index.ownEmails.isEmpty)
+    }
+
+    // Catches contacts staying loaded after contact matching is turned off.
+    @Test func disablingForgetsTheLoadedContacts() {
+        let index = ContactsIndex(authorized: { true })
+        index.use([jonathan], ownEmails: ["me@example.com"])
+        index.disable()
+        #expect(index.people.isEmpty)
+        #expect(index.ownEmails.isEmpty)
+    }
+
     @Test func emailMentions() {
         #expect(People.mentionsEmail("Send it to Jon's email address"))
         #expect(People.mentionsEmail("what's your e-mail"))

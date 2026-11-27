@@ -6,18 +6,30 @@ There is no Logos server. The app calls each provider's API directly from your M
 
 ## Install
 
-Logos needs macOS 26 or later and Xcode's command-line tools.
+Logos needs macOS 26 or later and Apple's free Command Line Tools, which `xcode-select --install` installs. It builds from source on your Mac, so you need no developer account. To install the latest release:
 
 ```sh
-./scripts/build.sh --install
+curl -fsSL https://logosvoice.dev/install.sh | bash
 ```
 
-This builds `build/Logos.app`, copies it to `/Applications`, and launches it. A waveform icon appears in the menu bar. On first launch, macOS asks for two permissions:
+From a checkout of this repository, run `./install.sh` instead.
+
+The installer builds Logos, installs `/Applications/Logos.app`, links the `logos` command into `~/.local/bin`, and starts the app. A waveform icon appears in the menu bar. On first launch, macOS asks for two permissions:
 
 - **Microphone**, to record while you hold the key.
 - **Accessibility**, to notice the Option key in other apps and to press ⌘V for you. Turn Logos on under System Settings → Privacy & Security → Accessibility. Until you do, Logos copies each dictation to the clipboard instead of pasting it.
 
-The build script signs the app with your Apple Development certificate when you have one, so permissions survive rebuilds. Set `CODESIGN_IDENTITY` to pick a different certificate.
+macOS keeps these permissions only while each build is signed by the same certificate. The build signs with your Apple Development or Developer ID certificate when you have one. Otherwise it creates a self-signed "Logos Local Signing" certificate once, in its own keychain in `~/Library/Application Support/Logos`, and signs every later build with it. Set `CODESIGN_IDENTITY` to pick a certificate yourself.
+
+While `ninjudd/logos` is private, the installer and `logos update` download with your `gh` login, or with `GH_TOKEN`.
+
+## Update
+
+```sh
+logos update
+```
+
+This builds and installs the newest release, then restarts the app. `logos update --check` only reports whether there is one. Logos checks GitHub at most once a day, and when a newer release exists, the menu bar menu shows **Update to vX.Y.Z…** and `logos transcribe` prints a warning. Set `LOGOS_OFFLINE` to turn the check off.
 
 ## Use it
 
@@ -84,17 +96,28 @@ Other settings:
 
 `prompt.md` is sent as the system prompt, and the transcript follows as the user message inside `<transcript>` tags. `{{app}}` in the prompt becomes the name of the app you're dictating into, so the prompt can say, for example, to keep commands exact in a terminal. If the prompt contains `{{transcript}}`, Logos sends the whole prompt as the user message with the transcript in that spot, and no system prompt.
 
-## Try a change without dictating
+## The logos command
 
-The app binary can run one audio file through the same pipeline and print the result without pasting anything:
+`logos` is the app's own binary, so it's always the same version as the app. `logos help` lists its commands.
+
+`logos transcribe` runs an audio file through the same pipeline as a dictation and prints the result instead of pasting it, which makes prompt and model changes quick to try:
 
 ```sh
 say -o /tmp/test.wav --data-format=LEI16@16000 "um so I think we should meet at three, no wait, at four"
-/Applications/Logos.app/Contents/MacOS/Logos --transcribe /tmp/test.wav --app Slack
+logos transcribe /tmp/test.wav --app Slack
 ```
 
 It prints the raw and cleaned text and how long they took. Add `--no-cleanup` to stop after transcription. Set `LOGOS_CONFIG_DIR` to try a config folder other than `~/.config/logos`.
 
 ## Develop
 
-Run the tests with `swift test`. Build the app with `./scripts/build.sh`, which leaves it in `build/Logos.app` without installing it.
+Run the tests with `swift test`. `./scripts/build.sh` builds `build/Logos.app` without installing it, and `./install.sh` builds and installs your checkout.
+
+## Release
+
+The version lives in one place: `CFBundleShortVersionString` in `Resources/Info.plist`. A release is a tag, `vX.Y.Z`, with no built files, because each Mac builds the source itself.
+
+1. Run the **Release** workflow from `main` under Actions, choosing patch, minor, or major. It opens a "Release X.Y.Z" pull request that bumps the version.
+2. Merge that pull request. The workflow then tags `vX.Y.Z` and publishes a GitHub release with generated notes, and `logos update` installs it everywhere.
+
+The workflow needs **Allow GitHub Actions to create and approve pull requests** turned on under Settings → Actions → General.

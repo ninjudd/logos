@@ -6,7 +6,15 @@ enum Updater {
     static var repo: String { ProcessInfo.processInfo.environment["LOGOS_REPO"] ?? "ninjudd/logos" }
 
     static var installedVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+        appBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    }
+
+    /// Logos.app, also when the binary runs through the `logos` symlink, which
+    /// makes Bundle.main look for an Info.plist beside the link instead.
+    private static var appBundle: Bundle {
+        guard let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return .main }
+        let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        return app.pathExtension == "app" ? Bundle(url: app) ?? .main : .main
     }
 
     /// True when `candidate` is a later version than `current`. Either may start with "v".

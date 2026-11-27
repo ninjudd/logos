@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func startRecording() {
         guard recorder == nil else { return }
         do {
-            recorder = try Recorder.start()
+            recorder = try Recorder.start(inputDevice: ConfigStore.shared.current.inputDevice)
         } catch {
             overlay.flash(error.localizedDescription)
             return

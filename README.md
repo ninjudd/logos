@@ -94,6 +94,7 @@ Other settings:
   - A modifier held on its own: `option`, `command`, `control`, `shift`, or `fn`, or one side, such as `rightOption` or `leftCommand`. Pressing any other key while you hold it cancels, so the modifier's shortcuts keep working.
   - Any key, with optional modifiers: `f13`, `ctrl+space`, or `cmd+shift+d`. Logos keeps that key, its repeats, and its release from reaching other apps, so pick one you don't otherwise need. A letter or Space without ⌘ or ⌃ would stop typing it anywhere.
 - `minHoldSeconds` is the shortest hold that counts as a dictation (default `0.3`).
+- `inputDevice` is the microphone Logos records from. `builtIn`, the default, is the Mac's own microphone, even when macOS switches its default input to an audio interface or a display; macOS's choice is often a device with no microphone attached. `system` follows macOS's default input. A device's UID, which the Microphone menu in Settings writes for you, picks that device, and Logos falls back to the built-in microphone while it isn't connected.
 - `trailingSpace` adds a space after each paste so dictations don't run together (default `true`).
 - `restoreClipboard` puts your previous clipboard back after pasting (default `true`).
 - `showWhenNoTextField` shows the dictation in a card to copy from when nothing focused takes text (default `true`). Set it to `false` to always paste.

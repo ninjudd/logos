@@ -139,6 +139,7 @@ private struct ConfigTab: View {
             Section("Dictation") {
                 ShortcutField(hotkey: model.binding(\.hotkey, ["hotkey"]) { $0.spec },
                               setRecording: model.setRecording)
+                MicrophonePicker(selection: model.binding(\.inputDevice, ["inputDevice"]))
                 TextField("Shortest hold, in seconds", value: model.binding(\.minHoldSeconds, ["minHoldSeconds"]),
                           format: .number)
                 Toggle("Add a space after each paste", isOn: model.binding(\.trailingSpace, ["trailingSpace"]))
@@ -185,6 +186,36 @@ private struct ConfigTab: View {
     private var providers: [String] {
         let common = ["anthropic", "openai", "groq", "openrouter"]
         return common + model.config.keys.keys.filter { !common.contains($0) }.sorted()
+    }
+}
+
+/// Chooses the microphone. Logos switches only when you pick one here, not when
+/// macOS changes its default input.
+private struct MicrophonePicker: View {
+    @Binding var selection: String
+    @State private var devices: [AudioInput.Device] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Microphone", selection: $selection) {
+                Text("Built-in microphone (recommended)").tag(AudioInput.builtIn)
+                Text("System default input").tag(AudioInput.systemDefault)
+                Divider()
+                ForEach(devices.filter { !$0.isBuiltIn }, id: \.uid) { device in
+                    Text(device.name).tag(device.uid)
+                }
+                if isDisconnected {
+                    Text("Not connected; using the built-in microphone").tag(selection)
+                }
+            }
+            Text("Logos keeps using this microphone when macOS switches its default input, such as when you plug in an audio interface.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .onAppear { devices = AudioInput.devices() }
+    }
+
+    private var isDisconnected: Bool {
+        ![AudioInput.builtIn, AudioInput.systemDefault].contains(selection) && !devices.contains { $0.uid == selection }
     }
 }
 

@@ -38,6 +38,10 @@ struct Config: Codable {
     var hotkey = Hotkey.option
     /// Holds shorter than this are treated as a tap and discarded.
     var minHoldSeconds = 0.3
+    /// The microphone to record from: "builtIn" for the Mac's own, whatever
+    /// macOS's default input is; "system" for macOS's default input; or a
+    /// device's UID. A device that isn't connected falls back to the built-in one.
+    var inputDevice = AudioInput.builtIn
     var transcription = Transcription()
     var cleanup = Cleanup()
     /// API keys by provider name. An empty key falls back to the environment

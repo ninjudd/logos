@@ -17,9 +17,14 @@ enum Pipeline {
         let raw = try await Transcriber.transcribe(audio, config: config, vocabulary: vocabulary)
         let transcribed = Date()
         var context = context
-        if config.useContacts,
-           let hint = People.hint(for: People.mentioned(in: raw, among: ContactsIndex.shared.people)) {
-            context.hints.append(hint)
+        if config.useContacts {
+            let index = ContactsIndex.shared
+            let wantsEmail = People.mentionsEmail(raw)
+            if let hint = People.hint(for: People.mentioned(in: raw, among: index.people),
+                                      includeTheirEmails: wantsEmail && config.shareContactEmails,
+                                      ownEmails: wantsEmail ? index.ownEmails : []) {
+                context.hints.append(hint)
+            }
         }
 
         var outcome = Outcome(raw: raw, text: raw)

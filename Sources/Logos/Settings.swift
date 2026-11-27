@@ -158,6 +158,9 @@ private struct ConfigTab: View {
                 Toggle("Send the text around the cursor to the cleanup model",
                        isOn: model.binding(\.readCursorContext, ["readCursorContext"]))
                 ContactsToggle(isOn: model.binding(\.useContacts, ["useContacts"]))
+                Toggle("Also send their email addresses", isOn: model.binding(\.shareContactEmails, ["shareContactEmails"]))
+                    .disabled(!model.config.useContacts)
+                    .padding(.leading, 20)
                 ModelField(title: "Model", value: model.binding(\.cleanup.model, ["cleanup", "model"]),
                            suggestions: Self.cleanupModels)
                 Picker("Effort (Anthropic)", selection: model.binding(\.cleanup.effort, ["cleanup", "effort"])) {
@@ -211,7 +214,7 @@ private struct ContactsToggle: View {
                 Text("Logos doesn't have Contacts access. Turn on Logos in System Settings → Privacy & Security → Contacts, then try again.")
                     .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("Logos matches each dictation against your contacts on your Mac. Only the people it seems to mention, with their email addresses, go to the cleanup model.")
+                Text("Logos matches each dictation against your contacts on your Mac. Only the names of people it seems to mention go to the cleanup model. When you mention an email, your own addresses go too, and theirs only with the setting below.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }

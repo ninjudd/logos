@@ -92,9 +92,13 @@ An entry sets the spelling, not the capitalization: the cleanup model picks the 
 
 ## Use your contacts
 
-Logos can spell the people you mention the way your contacts list them, and fill in their email addresses when you ask, as in "send it to Jon's email". In **Settings… → Config**, turn on **Use my contacts for names and email addresses** and allow Contacts access when macOS asks.
+Logos can spell the people you mention the way your contacts list them. In **Settings… → Config**, turn on **Use my contacts for names and email addresses** and allow Contacts access when macOS asks.
 
-Logos reads your contacts on your Mac and keeps up with them, so a contact you add or change works on your next dictation. It matches each transcript against them there. Only the people the transcript seems to mention, at most five, go to the cleanup model, with their email addresses. A name counts when the transcript capitalizes it, as speech models do for names, or when both a first name and a last name match. Short forms and near misses count too, such as "Jon" for Jonathan or "Grub" for Grubb.
+Logos reads your contacts on your Mac and keeps up with them, so a contact you add or change works on your next dictation. It matches each transcript against them there, and only the names of the people the transcript seems to mention, at most five, go to the cleanup model:
+
+- **A name counts** when both a first name and a last name match, or when the transcript capitalizes it, as speech models do for names. A capitalized word that starts a sentence counts alone only as an exact name of five letters or more, so "Will you…" doesn't bring in Will.
+- **Close matches count**: names that sound alike, such as "Grub" for Grubb or "Kirsten" for Kristin, typos, and short forms of first names, such as "Jon" for Jonathan.
+- **Email addresses** go only when the dictation mentions an email or an address. Your own, from the contact card that Contacts marks as yours, go then. Other people's go only if you also turn on **Also send their email addresses**, since they didn't agree to share them with your cleanup provider.
 
 ## Tune the prompt
 
@@ -183,7 +187,8 @@ A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variabl
 | `showWhenNoTextField` | `true` | Show a card to copy from when nothing focused takes text. |
 | `alwaysPasteApps` | empty | Bundle IDs of apps that always get a paste. |
 | `readCursorContext` | `true` | Send the text around the cursor, the field's placeholder, the window title, and a browser's page URL to the cleanup model. Password fields are never read, and speech models never see any of it. |
-| `useContacts` | `false` | Match each transcript against your contacts, and send the people it mentions, with their email addresses, to the cleanup model. |
+| `useContacts` | `false` | Match each transcript against your contacts, and send the names of the people it mentions to the cleanup model, plus your own email addresses when it mentions an email. |
+| `shareContactEmails` | `false` | Also send those people's email addresses when a dictation mentions an email. |
 | `saveHistory` | `true` | Keep `history.jsonl`. |
 
 To add a provider, give it a name, an API style, and a base URL. `api` is `anthropic` for the Anthropic Messages API, or `openai` for anything OpenAI-compatible:

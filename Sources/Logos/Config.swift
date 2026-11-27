@@ -66,6 +66,9 @@ struct Config: Codable {
     /// Match each transcript against your contacts on your Mac, and give the
     /// cleanup model the names and email addresses of the people it mentions.
     var useContacts = false
+    /// Also send the matched people's email addresses, when a dictation mentions
+    /// an email. Your own addresses are sent then either way.
+    var shareContactEmails = false
     /// Append raw and cleaned text to ~/.config/logos/history.jsonl.
     var saveHistory = true
 

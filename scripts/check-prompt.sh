@@ -15,6 +15,11 @@ embedded() {
   ' web/index.html | sed 's/&lt;/</g; s/&gt;/>/g; s/&amp;/\&/g'
 }
 
+if [ -z "$(embedded)" ]; then
+  echo "check-prompt: web/index.html has no <pre id=\"prompt\"> block, or the block is empty." >&2
+  exit 1
+fi
+
 # Vercel's build image has no diff, so compare in the shell and name the
 # first line that differs.
 if [ "$(embedded)" != "$(cat web/install.md)" ]; then

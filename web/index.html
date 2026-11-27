@@ -98,11 +98,15 @@
       padding: 16px 18px; overflow-x: auto; font-size: 14px; line-height: 1.5;
     }
     footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 15px; color: var(--muted); }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .source { font-size: 15px; color: var(--muted); text-decoration: none; }
+    .source:hover { color: var(--fg); }
     @media (max-width: 520px) { h1 { font-size: 40px; } main { padding-top: 48px; } }
   </style>
 </head>
 <body>
 <main>
+  <div class="top">
   <div class="pill" aria-hidden="true">
     <span style="animation-delay: -0.1s"></span><span style="animation-delay: -0.5s"></span>
     <span style="animation-delay: -0.9s"></span><span style="animation-delay: -0.2s"></span>
@@ -110,6 +114,8 @@
     <span style="animation-delay: -0.3s"></span><span style="animation-delay: -0.8s"></span>
     <span style="animation-delay: -1.2s"></span><span style="animation-delay: -0.4s"></span>
     <span style="animation-delay: -0.6s"></span><span style="animation-delay: -1.0s"></span>
+  </div>
+  <a class="source" href="https://github.com/ninjudd/logos">Source on GitHub</a>
   </div>
 
   <h1>Dictation for your Mac, on your terms.</h1>
@@ -119,7 +125,7 @@
     <code id="install">curl -fsSL https://logosvoice.dev/install.sh | bash</code>
     <button type="button" id="copy">Copy</button>
   </div>
-  <p class="note">Needs macOS 26 or later and Apple's free Command Line Tools (<code>xcode-select --install</code>). Logos builds from source on your Mac, so you need no developer account.</p>
+  <p class="note">Needs macOS 26 or later and Apple's free Command Line Tools (<code>xcode-select --install</code>). Logos builds from source on your Mac, so you need no developer account. The source is on <a href="https://github.com/ninjudd/logos">GitHub</a>.</p>
 
   <h2>Why Logos</h2>
   <div class="features">
@@ -150,7 +156,7 @@
 }</code></pre>
   <p>The <code>logos</code> command runs an audio file through the same pipeline, so you can try a prompt change without dictating, and <code>logos update</code> builds and installs the newest release.</p>
 
-  <footer>Logos is built from source on each Mac. It sends your audio and text only to the providers you configure.</footer>
+  <footer>Logos is open source under the MIT License, at <a href="https://github.com/ninjudd/logos">github.com/ninjudd/logos</a>. It's built from source on each Mac, and it sends your audio and text only to the providers you configure.</footer>
 </main>
 <script>
   document.getElementById("copy").addEventListener("click", async (event) => {

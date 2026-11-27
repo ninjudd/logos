@@ -9,11 +9,17 @@ final class OverlayModel: ObservableObject {
     }
 
     @Published var phase: Phase = .recording
-    @Published var levels: [Double] = Array(repeating: 0, count: 14)
+    /// One bar per frequency band, low to high.
+    @Published var levels: [Double] = Array(repeating: 0, count: Spectrum.bandCount)
 
-    func push(_ level: Double) {
-        levels.removeFirst()
-        levels.append(level)
+    /// Per-frame decay at 30 frames a second: a bar falls to a tenth of its height
+    /// in about half a second once its frequency goes quiet.
+    private let decay = 0.86
+
+    /// Each bar jumps up to new sound at once and fades when the sound stops.
+    func update(_ bands: [Double]) {
+        guard bands.count == levels.count else { return }
+        levels = zip(levels, bands).map { old, new in max(new, old * decay) }
     }
 }
 
@@ -31,7 +37,7 @@ struct OverlayView: View {
                             .frame(width: 3, height: 4 + model.levels[i] * 18)
                     }
                 }
-                .animation(.linear(duration: 0.06), value: model.levels)
+                .animation(.linear(duration: 1.0 / 30), value: model.levels)
             case .processing(let label):
                 ProgressView().controlSize(.small).tint(.white)
                 Text(label)

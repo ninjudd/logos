@@ -21,7 +21,7 @@ The build script signs the app with your Apple Development certificate when you 
 
 ## Use it
 
-Hold Option, talk, and release. A small pill at the bottom of the screen shows your voice level while you hold the key, then a spinner while Logos transcribes and cleans up. Taps shorter than `minHoldSeconds` are ignored. Pressing any other key or clicking while you hold Option cancels the recording, so Option shortcuts and Option-typed characters keep working.
+Hold Option, talk, and release. A small pill at the bottom of the screen shows the frequencies in your voice while you hold the key, with low pitches on the left and high on the right. Each bar jumps up with sound in its range and fades when the sound stops. Then a spinner shows while Logos transcribes and cleans up. Taps shorter than `minHoldSeconds` are ignored. Pressing any other key or clicking while you hold Option cancels the recording, so Option shortcuts and Option-typed characters keep working.
 
 The menu bar icon has **Edit Prompt…**, **Edit Config…**, **Open History**, **Copy Last Dictation**, and **Launch at Login**.
 

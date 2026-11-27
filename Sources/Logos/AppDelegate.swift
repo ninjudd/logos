@@ -48,9 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func startRecording() {
         guard recorder == nil else { return }
         do {
-            let r = try Recorder()
-            try r.start()
-            recorder = r
+            recorder = try Recorder.start()
         } catch {
             overlay.flash(error.localizedDescription)
             return
@@ -71,7 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             overlay.show(.recording)
             setIcon(recording: true)
         }
-        if overlayShown { overlay.model.push(recorder.level) }
+        if overlayShown { overlay.model.update(recorder.spectrum) }
     }
 
     private func endRecording() -> Recorder? {

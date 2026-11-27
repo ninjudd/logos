@@ -21,9 +21,10 @@ swift build -c release
 
 app=build/Logos.app
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$(swift build -c release --show-bin-path)/Logos" "$app/Contents/MacOS/Logos"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 
 local_identity="Logos Local Signing"
 signing_dir="${LOGOS_SIGNING_DIR:-$HOME/Library/Application Support/Logos}"

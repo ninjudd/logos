@@ -358,8 +358,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func setIcon(recording: Bool) {
-        let image = NSImage(systemSymbolName: recording ? "waveform.circle.fill" : "waveform", accessibilityDescription: "Logos")
-        image?.isTemplate = true
-        statusItem?.button?.image = image
+        statusItem?.button?.image = Glyph.menuBarImage(recording: recording)
     }
 }

@@ -26,9 +26,9 @@ To have a coding agent such as Claude Code, Cursor, or Codex do it for you, give
 
 3. Allow the two permissions macOS asks for:
    - **Microphone**, so Logos can record while you hold the key. Click **Allow**.
-   - **Accessibility**, so Logos can notice the hotkey in other apps and press ⌘V for you. Open System Settings → Privacy & Security → Accessibility and turn on **Logos**. Until you do, Logos copies each dictation to the clipboard instead of pasting it.
+   - **Accessibility**, so Logos can notice the hotkey in other apps and press ⌘V for you. Open System Settings → Privacy & Security → Accessibility and turn on **Logos**. Until you do, holding Option does nothing, because Logos can't see the key. Logos notices the change within a few seconds, so you don't need to restart it.
 
-4. Add an Anthropic API key for cleanup. Without one, Logos still works, but it pastes the raw transcript.
+4. Add an Anthropic API key for cleanup. Without one, Logos pastes the raw transcript and shows `Cleanup failed, pasted raw text: No anthropic key under "keys" in config.json` after every dictation. To dictate without cleanup and without the message, turn off **Clean up transcripts** under **Cleanup** in **Settings… → Config**.
    1. Sign in at [console.anthropic.com](https://console.anthropic.com), open **API Keys**, and create a key. The page shows the key only once, so copy it now.
    2. Click the waveform icon in the menu bar, choose **Settings…**, and paste the key into **anthropic** under **API keys** on the **Config** tab. Logos saves it as you type.
 
@@ -234,7 +234,15 @@ Name the file after your tool, such as `projector.json`, and write it atomically
 - **`logos update`** builds and installs the newest release. `--check` only reports whether one is out.
 - **`logos version`** prints the installed version.
 
-Set `LOGOS_OFFLINE` to stop both the app and the command from checking for releases.
+Set `LOGOS_OFFLINE` to any value to stop the daily check for a new release. With it set, the waveform menu shows no **Update to** item, and `logos transcribe` never warns that a newer release is out. It doesn't affect `logos update`, which always asks GitHub for the newest release.
+
+The app sees `LOGOS_OFFLINE` only when launchd passes it on, because an app that Finder or `open` starts doesn't get your shell's environment. Set it for launchd, then quit and reopen Logos:
+
+```sh
+launchctl setenv LOGOS_OFFLINE 1
+```
+
+The setting lasts until you log out. A shell variable, such as one set in `~/.zshrc`, reaches only the `logos` command.
 
 ## Develop
 

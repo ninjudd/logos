@@ -3,7 +3,7 @@
 /// carries an id, and one that finishes after it was abandoned is discarded.
 struct MicrophoneStart {
     /// Whether the hotkey is down for the current dictation.
-    private(set) var holding = false
+    private var holding = false
     private var latestID = 0
     private var inFlight: Int?
 

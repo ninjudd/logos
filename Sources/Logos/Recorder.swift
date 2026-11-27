@@ -26,7 +26,6 @@ final class Recorder: @unchecked Sendable {
         analyzer = Spectrum(sampleRate: sampleRate)
     }
 
-    /// Starts recording from the default input device.
     /// Starts recording from the microphone `inputDevice` names. If that device
     /// can't be selected, it records from macOS's default input instead of not at all.
     static func start(inputDevice: String) throws -> Recorder {

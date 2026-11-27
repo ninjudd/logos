@@ -3,14 +3,12 @@ import Foundation
 
 /// Your contacts, matched against each transcript on your Mac. Only the names of
 /// the few people a dictation seems to mention reach the cleanup model, so it
-/// can spell them. Email addresses go only when the dictation mentions one: your
-/// own always, other people's only when you allow it.
+/// can spell them. Their email addresses are never read, so they can't be sent.
 enum People {
     struct Person: Equatable {
         var given: String
         var family: String
         var nickname: String
-        var emails: [String]
 
         var name: String { [given, family].filter { !$0.isEmpty }.joined(separator: " ") }
     }
@@ -115,26 +113,52 @@ enum People {
         return chosen
     }
 
-    /// Whether the speaker mentions an email address, so addresses are worth sending.
+    /// Whether the speaker mentions mail or an address, so their own addresses are
+    /// worth sending. "mail" covers "email", "e-mail", and "Gmail".
     static func mentionsEmail(_ transcript: String) -> Bool {
         let text = transcript.lowercased()
-        return ["email", "e-mail", "address", "@"].contains { text.contains($0) }
+        return ["mail", "address", "@"].contains { text.contains($0) }
     }
 
-    /// The hint for the cleanup prompt's {{context}}, or nil when there's nothing to say.
-    static func hint(for people: [Person], includeTheirEmails: Bool, ownEmails: [String]) -> AppContext.Hint? {
-        var sentences: [String] = []
-        if !people.isEmpty {
-            let list = people.map { person in
-                includeTheirEmails && !person.emails.isEmpty
-                    ? "\(person.name) (\(person.emails.joined(separator: ", ")))" : person.name
-            }.joined(separator: "; ")
-            sentences.append("People the transcript may mention. When it refers to one of them, spell the name as listed here: \(list).")
+    /// The {{context}} hints for one transcript: the names of the contacts it
+    /// mentions, with useContacts, and your own addresses, with includeMyEmails
+    /// when it mentions mail. `cardEmails` are the addresses on your own card,
+    /// which Logos reads only with useContacts.
+    static func hints(for transcript: String, config: Config, people: [Person], cardEmails: [String]) -> [AppContext.Hint] {
+        var hints: [AppContext.Hint] = []
+        if config.useContacts, let names = hint(for: mentioned(in: transcript, among: people)) {
+            hints.append(names)
         }
-        if !ownEmails.isEmpty {
-            sentences.append("The speaker's own email addresses: \(ownEmails.joined(separator: ", ")).")
+        if config.includeMyEmails, mentionsEmail(transcript),
+           let emails = emailHint((config.useContacts ? cardEmails : []) + config.myEmails) {
+            hints.append(emails)
         }
-        return sentences.isEmpty ? nil : AppContext.Hint(source: "your contacts", text: sentences.joined(separator: " "))
+        return hints
+    }
+
+    /// The {{context}} hint naming the people a transcript may mention, or nil for none.
+    static func hint(for people: [Person]) -> AppContext.Hint? {
+        guard !people.isEmpty else { return nil }
+        let list = people.map(\.name).joined(separator: "; ")
+        return AppContext.Hint(source: "your contacts",
+                               text: "People the transcript may mention. When it refers to one of them, spell the name as listed here: \(list).")
+    }
+
+    /// The {{context}} hint giving the speaker's own email addresses, each once
+    /// whatever its case, or nil for none.
+    static func emailHint(_ addresses: [String]) -> AppContext.Hint? {
+        var seen = Set<String>()
+        let unique = addresses
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        guard !unique.isEmpty else { return nil }
+        return AppContext.Hint(source: "your email addresses",
+                               text: "The speaker's own email addresses: \(unique.joined(separator: ", ")).")
+    }
+
+    /// Splits addresses typed into one field, separated by commas, semicolons, or spaces.
+    static func parseEmails(_ text: String) -> [String] {
+        text.split(whereSeparator: { ",; \n\t".contains($0) }).map(String.init)
     }
 
     // MARK: Similarity
@@ -311,11 +335,11 @@ final class ContactsIndex: @unchecked Sendable {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             let store = CNContactStore()
-            let keys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactNicknameKey, CNContactEmailAddressesKey] as [CNKeyDescriptor]
+            // Only names: other people's email addresses are never read.
+            let keys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactNicknameKey] as [CNKeyDescriptor]
             var people: [People.Person] = []
             try? store.enumerateContacts(with: CNContactFetchRequest(keysToFetch: keys)) { contact, _ in
-                let person = People.Person(given: contact.givenName, family: contact.familyName, nickname: contact.nickname,
-                                           emails: contact.emailAddresses.map { String($0.value) })
+                let person = People.Person(given: contact.givenName, family: contact.familyName, nickname: contact.nickname)
                 if !person.name.isEmpty { people.append(person) }
             }
             let me = try? store.unifiedMeContactWithKeys(toFetch: [CNContactEmailAddressesKey as CNKeyDescriptor])

@@ -4,11 +4,11 @@ import Testing
 
 @Suite struct PeopleTests {
     private typealias Person = People.Person
-    private let jonathan = Person(given: "Jonathan", family: "Grubb", nickname: "", emails: ["jonathan@example.com"])
-    private let will = Person(given: "Will", family: "Turner", nickname: "", emails: ["will@example.com"])
-    private let theodore = Person(given: "Theodore", family: "Park", nickname: "Teddy", emails: [])
-    private let kristin = Person(given: "Kristin", family: "Hale", nickname: "", emails: [])
-    private let jonas = Person(given: "Jonas", family: "Lind", nickname: "", emails: [])
+    private let jonathan = Person(given: "Jonathan", family: "Grubb", nickname: "")
+    private let will = Person(given: "Will", family: "Turner", nickname: "")
+    private let theodore = Person(given: "Theodore", family: "Park", nickname: "Teddy")
+    private let kristin = Person(given: "Kristin", family: "Hale", nickname: "")
+    private let jonas = Person(given: "Jonas", family: "Lind", nickname: "")
 
     private func names(_ transcript: String, _ people: [Person]) -> [String] {
         People.mentioned(in: transcript, among: people).map(\.name)
@@ -31,7 +31,7 @@ import Testing
 
     // Catches surnames matching as short forms, which would let "Park" pull in "Parker".
     @Test func surnamesHaveNoShortForms() {
-        let parker = Person(given: "Ann", family: "Parker", nickname: "", emails: [])
+        let parker = Person(given: "Ann", family: "Parker", nickname: "")
         #expect(names("We met near the Park entrance.", [parker]).isEmpty)
     }
 
@@ -52,38 +52,63 @@ import Testing
 
     // Catches a first-name-only match outranking the person named in full.
     @Test func fullNameRanksAboveFirstNameOnly() {
-        let jonathanLind = Person(given: "Jonathan", family: "Lind", nickname: "", emails: [])
+        let jonathanLind = Person(given: "Jonathan", family: "Lind", nickname: "")
         #expect(names("Yes, Jonathan Grubb and Jonas agreed.", [jonathanLind, jonas, jonathan]).first == "Jonathan Grubb")
     }
 
     // Catches a single name like "Alex" sending everyone named Alex.
     @Test func singleNameMatchesAreCapped() {
-        let alexes = (1...8).map { Person(given: "Alex", family: "Person\($0)", nickname: "", emails: []) }
+        let alexes = (1...8).map { Person(given: "Alex", family: "Person\($0)", nickname: "") }
         #expect(People.mentioned(in: "Then Alex said hi.", among: alexes).count == People.singleNameLimit)
     }
 
     @Test func emailMentions() {
         #expect(People.mentionsEmail("Send it to Jon's email address"))
         #expect(People.mentionsEmail("what's your e-mail"))
+        #expect(People.mentionsEmail("Mail it to my Gmail"))
         #expect(!People.mentionsEmail("Send it to Jon"))
     }
 
-    // Catches other people's email addresses leaving the Mac by default.
-    @Test func hintSendsNamesOnlyByDefault() throws {
-        let hint = try #require(People.hint(for: [jonathan], includeTheirEmails: false, ownEmails: []))
-        #expect(hint.text.contains("Jonathan Grubb"))
-        #expect(!hint.text.contains("@"))
+    private func config(contacts: Bool = true, myEmails: Bool, extra: [String] = []) -> Config {
+        var config = Config()
+        config.useContacts = contacts
+        config.includeMyEmails = myEmails
+        config.myEmails = extra
+        return config
     }
 
-    @Test func hintIncludesTheirEmailsWhenAllowed() throws {
-        let hint = try #require(People.hint(for: [jonathan, theodore], includeTheirEmails: true, ownEmails: []))
-        #expect(hint.text.contains("Jonathan Grubb (jonathan@example.com); Theodore Park"))
+    private func hintTexts(_ transcript: String, _ config: Config, card: [String] = ["me@example.com"]) -> [String] {
+        People.hints(for: transcript, config: config, people: [jonathan, theodore], cardEmails: card).map(\.text)
     }
 
-    @Test func hintIncludesYourOwnEmails() throws {
-        let hint = try #require(People.hint(for: [], includeTheirEmails: false, ownEmails: ["me@example.com"]))
-        #expect(hint.text == "The speaker's own email addresses: me@example.com.")
-        #expect(People.hint(for: [], includeTheirEmails: true, ownEmails: []) == nil)
+    @Test func namesHintListsMatchedPeople() {
+        #expect(hintTexts("Ask Jonathan Grubb.", config(myEmails: false))
+            == ["People the transcript may mention. When it refers to one of them, spell the name as listed here: Jonathan Grubb."])
+        #expect(hintTexts("Ask Jonathan Grubb.", config(contacts: false, myEmails: false)).isEmpty)
+    }
+
+    // Catches your own addresses going out without the setting.
+    @Test func ownEmailsNeedTheSetting() {
+        #expect(hintTexts("Send it to my email.", config(myEmails: false)).isEmpty)
+    }
+
+    @Test func ownEmailsGoWhenMailIsMentioned() {
+        let on = config(myEmails: true, extra: ["Me@Example.com", "me@work.example"])
+        #expect(hintTexts("Send it to my email.", on)
+            == ["The speaker's own email addresses: me@example.com, me@work.example."])
+        #expect(hintTexts("Send it to Theodore.", on).allSatisfy { !$0.contains("@") })
+    }
+
+    // Catches the card's addresses being used when contacts are off.
+    @Test func cardEmailsNeedContacts() {
+        let off = config(contacts: false, myEmails: true, extra: ["me@work.example"])
+        #expect(hintTexts("Send it to my email.", off) == ["The speaker's own email addresses: me@work.example."])
+        #expect(hintTexts("Send it to my email.", config(contacts: false, myEmails: true)).isEmpty)
+    }
+
+    @Test func parsesTypedAddresses() {
+        #expect(People.parseEmails("a@x.example, b@y.example;c@z.example ") == ["a@x.example", "b@y.example", "c@z.example"])
+        #expect(People.parseEmails(" , ").isEmpty)
     }
 
     // Published reference values for Jaro-Winkler.
@@ -106,6 +131,7 @@ import Testing
     @Test func offByDefault() throws {
         let config = try Config.decode(Data("{}".utf8))
         #expect(config.useContacts == false)
-        #expect(config.shareContactEmails == false)
+        #expect(config.includeMyEmails == false)
+        #expect(config.myEmails.isEmpty)
     }
 }

@@ -158,9 +158,13 @@ private struct ConfigTab: View {
                 Toggle("Send the text around the cursor to the cleanup model",
                        isOn: model.binding(\.readCursorContext, ["readCursorContext"]))
                 ContactsToggle(isOn: model.binding(\.useContacts, ["useContacts"]))
-                Toggle("Also send their email addresses", isOn: model.binding(\.shareContactEmails, ["shareContactEmails"]))
-                    .disabled(!model.config.useContacts)
-                    .padding(.leading, 20)
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Include my email addresses", isOn: model.binding(\.includeMyEmails, ["includeMyEmails"]))
+                    Text("When you mention mail or an address, the cleanup model gets your addresses: the ones on your card in Contacts, when contacts are on, and any below.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                EmailsField(addresses: model.binding(\.myEmails, ["myEmails"]))
+                    .disabled(!model.config.includeMyEmails)
                 ModelField(title: "Model", value: model.binding(\.cleanup.model, ["cleanup", "model"]),
                            suggestions: Self.cleanupModels)
                 Picker("Effort (Anthropic)", selection: model.binding(\.cleanup.effort, ["cleanup", "effort"])) {
@@ -200,7 +204,7 @@ private struct ContactsToggle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Toggle("Use my contacts for names and email addresses", isOn: Binding(
+            Toggle("Use my contacts for names", isOn: Binding(
                 get: { isOn },
                 set: { on in
                     isOn = on
@@ -214,10 +218,26 @@ private struct ContactsToggle: View {
                 Text("Logos doesn't have Contacts access. Turn on Logos in System Settings → Privacy & Security → Contacts, then try again.")
                     .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("Logos matches each dictation against your contacts on your Mac. Only the names of people it seems to mention go to the cleanup model. When you mention an email, your own addresses go too, and theirs only with the setting below.")
+                Text("Logos matches each dictation against your contacts on your Mac. Only the names of people it seems to mention go to the cleanup model, never their email addresses.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+/// More email addresses of yours, typed as a list. It keeps its own text, so a
+/// trailing comma survives while you type the next address.
+private struct EmailsField: View {
+    @Binding var addresses: [String]
+    @State private var text = ""
+
+    var body: some View {
+        TextField("Other email addresses", text: $text, prompt: Text("you@example.com, you@work.example"))
+            .onAppear { text = addresses.joined(separator: ", ") }
+            .onChange(of: text) { _, new in
+                let parsed = People.parseEmails(new)
+                if parsed != addresses { addresses = parsed }
+            }
     }
 }
 

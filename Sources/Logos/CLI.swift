@@ -28,11 +28,12 @@ enum CLI {
     """
 
     /// Whether these arguments are a command rather than an app launch. macOS
-    /// launches the app with no arguments, or with flags such as
-    /// -NSDocumentRevisionsDebugMode, so anything else is meant for the CLI. Run
-    /// with no arguments from a terminal, the binary prints help.
-    static func handles(_ args: [String]) -> Bool {
-        guard let first = args.first else { return isatty(STDIN_FILENO) != 0 }
+    /// launches the app from inside Logos.app, with no arguments or with flags
+    /// such as -NSDocumentRevisionsDebugMode, so anything else is meant for the
+    /// CLI. Through the `logos` symlink, no arguments prints help, so the command
+    /// never starts a second copy of the app.
+    static func handles(_ args: [String], invokedAs path: String = CommandLine.arguments[0]) -> Bool {
+        guard let first = args.first else { return !path.hasSuffix(".app/Contents/MacOS/Logos") }
         return !first.hasPrefix("-") || ["-h", "--help", "--version"].contains(first)
     }
 

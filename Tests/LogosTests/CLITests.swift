@@ -13,6 +13,14 @@ import Testing
         #expect(!CLI.handles(["-NSDocumentRevisionsDebugMode", "YES"]))
     }
 
+    // Catches the `logos` command starting a second copy of the app, which would
+    // paste every dictation twice.
+    @Test func noArgumentsStartTheAppOnlyFromInsideLogosApp() {
+        #expect(!CLI.handles([], invokedAs: "/Applications/Logos.app/Contents/MacOS/Logos"))
+        #expect(CLI.handles([], invokedAs: "/Users/me/.local/bin/logos"))
+        #expect(CLI.handles([], invokedAs: "logos"))
+    }
+
     @Test func transcribeTakesAFileAndOptions() throws {
         #expect(try CLI.parse(["transcribe", "a.wav"]) == .transcribe(file: "a.wav", app: "Terminal", cleanup: true))
         #expect(try CLI.parse(["transcribe", "--app", "Slack", "a.wav", "--no-cleanup"])

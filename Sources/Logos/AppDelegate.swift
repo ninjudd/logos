@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var updateTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        quitOtherCopies()
         ConfigStore.shared.ensureFiles()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         setIcon(recording: false)
@@ -54,6 +55,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The cache limits this to one request to GitHub a day.
         updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.checkForUpdate() }
+        }
+    }
+
+    /// Two copies would both answer the hotkey and paste every dictation twice.
+    /// The newest copy wins, because installs and updates start the new version.
+    private func quitOtherCopies() {
+        guard let id = Bundle.main.bundleIdentifier else { return }
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: id)
+            .filter { $0 != NSRunningApplication.current }
+        for other in others { other.terminate() }
+        guard !others.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            for other in others where !other.isTerminated { other.forceTerminate() }
         }
     }
 

@@ -6,11 +6,44 @@ import Foundation
 /// can spell them. Their email addresses are never read, so they can't be sent.
 enum People {
     struct Person: Equatable {
-        var given: String
-        var family: String
-        var nickname: String
+        let given: String
+        let family: String
+        let nickname: String
+        /// The name parts long enough to match, worked out once when the
+        /// contact loads rather than at every dictation.
+        let parts: [Part]
+
+        struct Part: Equatable {
+            var spelling: Spelling
+            /// A first name or nickname, which has short forms such as "Jon"
+            /// for "Jonathan". Surnames don't.
+            var isFirstName: Bool
+        }
+
+        init(given: String, family: String, nickname: String) {
+            self.given = given
+            self.family = family
+            self.nickname = nickname
+            parts = [(given, true), (nickname, true), (family, false)]
+                .filter { $0.0.count >= 3 }
+                .map { Part(spelling: Spelling($0.0), isFirstName: $0.1) }
+        }
 
         var name: String { [given, family].filter { !$0.isEmpty }.joined(separator: " ") }
+    }
+
+    /// A name or a word, lowercased, with its sound key, so that matching
+    /// compares stored values.
+    struct Spelling: Equatable {
+        let text: String
+        let letters: [Character]
+        let key: String
+
+        init(_ text: String) {
+            self.text = text.lowercased()
+            letters = Array(self.text)
+            key = People.metaphone(text)
+        }
     }
 
     /// The most people one dictation sends to the cleanup model.
@@ -20,11 +53,22 @@ enum People {
 
     /// A word of a transcript, with what its position says about it.
     struct Word: Equatable {
-        var text: String
-        var capitalized: Bool
+        let text: String
+        let capitalized: Bool
         /// The first word of the transcript or of a sentence, which is capitalized
         /// whether or not it's a name.
-        var sentenceStart: Bool
+        let sentenceStart: Bool
+        let spelling: Spelling
+
+        init(text: String, capitalized: Bool, sentenceStart: Bool) {
+            self.text = text
+            self.capitalized = capitalized
+            self.sentenceStart = sentenceStart
+            spelling = Spelling(text)
+        }
+
+        /// Capitalized where an ordinary word wouldn't be, so likely a name.
+        var looksLikeAName: Bool { capitalized && !sentenceStart }
     }
 
     static func words(_ transcript: String) -> [Word] {
@@ -54,57 +98,72 @@ enum People {
 
     /// How `word` matches the name part `part`, if at all. `isFirstName` allows
     /// short forms such as "Jon" for "Jonathan", which surnames don't have.
-    static func match(_ word: String, _ part: String, isFirstName: Bool) -> Match? {
-        let word = word.lowercased(), part = part.lowercased()
-        guard word.count >= 3, part.count >= 3 else { return nil }
-        if word == part { return .exact }
-        let key = metaphone(word)
-        if key.count >= 2, key == metaphone(part) { return .soundsAlike }
+    static func match(_ word: Spelling, _ part: Spelling, isFirstName: Bool) -> Match? {
+        let wordCount = word.letters.count, partCount = part.letters.count
+        guard wordCount >= 3, partCount >= 3 else { return nil }
+        if word.text == part.text { return .exact }
+        if word.key.count >= 2, word.key == part.key { return .soundsAlike }
         // Jaro-Winkler rewards a shared start, so it would also rate truncations
         // like "Park" for "Parker" as similar. Keep it to typos of about the same
         // length; first names' short forms are handled below.
-        if min(word.count, part.count) >= 4, abs(word.count - part.count) <= 1, jaroWinkler(word, part) >= 0.9 {
+        if min(wordCount, partCount) >= 4, abs(wordCount - partCount) <= 1,
+           jaroWinkler(word.letters, part.letters) >= 0.9 {
             return .similar
         }
-        if isFirstName, part.hasPrefix(word), part.count - word.count <= 5 { return .shortForm }
+        if isFirstName, part.text.hasPrefix(word.text), partCount - wordCount <= 5 { return .shortForm }
         return nil
     }
 
     /// The people `transcript` seems to mention, best match first.
     ///
-    /// A person counts when both a first name, or their nickname, and their
-    /// last name match words in the transcript, or when one matches a
-    /// capitalized word, since speech models capitalize names. A capitalized
-    /// word that starts a sentence may be an ordinary word, such as "Will" in
-    /// "Will you…", so on its own it counts only as an exact name of five
-    /// letters or more.
+    /// A person counts when one of their names matches a capitalized word,
+    /// since speech models capitalize names. A capitalized word that starts a
+    /// sentence may be an ordinary word, such as "Will" in "Will you…", so on
+    /// its own it counts only as an exact name of five letters or more.
+    ///
+    /// A first name or nickname directly followed by the last name, in the
+    /// same sentence, counts as a full name, such as "Jon Grub", and ranks
+    /// above a single name. The pair needs one of those capitals too, or both
+    /// words spelled as the contact's are, because ordinary words in a row can
+    /// sound like a name: "will write" sounds like William Wright.
     static func mentioned(in transcript: String, among people: [Person], limit: Int = People.limit) -> [Person] {
         let words = words(transcript)
         guard !words.isEmpty else { return [] }
-        var scored: [(person: Person, parts: Int, score: Int)] = []
+        var scored: [(person: Person, fullName: Bool, score: Int)] = []
         for person in people {
-            let parts: [(text: String, isFirstName: Bool)] = [(person.given, true), (person.nickname, true), (person.family, false)]
-                .filter { $0.text.count >= 3 }
-            var matchedNames = Set<Bool>(), best = 0, named = false
-            for part in parts {
-                let matches = words.compactMap { word in
-                    match(word.text, part.text, isFirstName: part.isFirstName).map { (word, $0) }
-                }
-                guard let strongest = matches.max(by: { $0.1 < $1.1 }) else { continue }
-                // A first name and a nickname are the same name, so they count once.
-                matchedNames.insert(part.isFirstName)
-                best = max(best, strongest.1.rawValue)
-                named = named || matches.contains { word, kind in
-                    word.capitalized && (!word.sentenceStart || (kind == .exact && word.text.count >= 5))
+            // The strongest match each word makes with a first name or
+            // nickname, which are the same name, and with the last name.
+            var first = [Match?](repeating: nil, count: words.count)
+            var last = first
+            // The strongest match among the words that name the person, so a
+            // stray ordinary word can't raise their rank.
+            var best: Match?
+            for part in person.parts {
+                for (i, word) in words.enumerated() {
+                    guard let kind = match(word.spelling, part.spelling, isFirstName: part.isFirstName) else { continue }
+                    if part.isFirstName { first[i] = max(first[i] ?? kind, kind) } else { last[i] = kind }
+                    if word.looksLikeAName || (word.capitalized && kind == .exact && word.text.count >= 5) {
+                        best = max(best ?? kind, kind)
+                    }
                 }
             }
-            guard matchedNames.count == 2 || named else { continue }
-            scored.append((person, matchedNames.count, matchedNames.count * 10 + best))
+            var fullName: Match?
+            for i in words.indices.dropLast() {
+                guard let given = first[i], let family = last[i + 1], !words[i + 1].sentenceStart,
+                      words[i].looksLikeAName || words[i + 1].looksLikeAName || (given == .exact && family == .exact)
+                else { continue }
+                fullName = max(fullName ?? given, given, family)
+            }
+            if let fullName {
+                scored.append((person, true, 20 + fullName.rawValue))
+            } else if let best {
+                scored.append((person, false, 10 + best.rawValue))
+            }
         }
         scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.person.name < $1.person.name }
         var chosen: [Person] = [], singles = 0
         for entry in scored where chosen.count < limit {
-            if entry.parts < 2 {
+            if !entry.fullName {
                 guard singles < singleNameLimit else { continue }
                 singles += 1
             }
@@ -165,7 +224,10 @@ enum People {
 
     /// Jaro-Winkler similarity from 0 to 1, which favors strings that start alike.
     static func jaroWinkler(_ a: String, _ b: String) -> Double {
-        let a = Array(a), b = Array(b)
+        jaroWinkler(Array(a), Array(b))
+    }
+
+    static func jaroWinkler(_ a: [Character], _ b: [Character]) -> Double {
         if a.isEmpty || b.isEmpty { return a.isEmpty && b.isEmpty ? 1 : 0 }
         let window = max(0, max(a.count, b.count) / 2 - 1)
         var aMatched = [Bool](repeating: false, count: a.count)

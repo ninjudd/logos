@@ -96,7 +96,8 @@ Logos can spell the people you mention the way your contacts list them. In **Set
 
 Logos reads your contacts on your Mac and keeps up with them, so a contact you add or change works on your next dictation. It matches each transcript against them there, and only the names of the people the transcript seems to mention, at most five, go to the cleanup model:
 
-- **A name counts** when both a first name and a last name match, or when the transcript capitalizes it, as speech models do for names. A capitalized word that starts a sentence counts alone only as an exact name of five letters or more, so "Will you…" doesn't bring in Will.
+- **A name counts** when the transcript capitalizes it, as speech models do for names. A capitalized word that starts a sentence counts alone only as an exact name of five letters or more, so "Will you…" doesn't bring in Will.
+- **A full name ranks first**: a first name or nickname followed directly by the last name, such as "Jon Grub". Ordinary words in a row can sound like a name, as "will write" sounds like William Wright, so a pair counts only when the transcript capitalizes one of its words as a name, or when both words are spelled exactly as the contact's are. At most two of the five people may rest on a single name.
 - **Close matches count**: names that sound alike, such as "Grub" for Grubb or "Kirsten" for Kristin, typos, and short forms of first names, such as "Jon" for Jonathan.
 - **Other people's email addresses never go.** Logos doesn't read them, since those people didn't agree to share them with your cleanup provider.
 

@@ -44,6 +44,32 @@ import Testing
         #expect(names("I think we will ship the fix today.", [will, theodore]).isEmpty)
     }
 
+    // Catches ordinary lowercase words that sound like a first and a last name,
+    // anywhere in the transcript, sending a contact nobody mentioned.
+    @Test func everydayWordsDontPairUpIntoAFullName() {
+        let william = Person(given: "William", family: "Wright", nickname: "")
+        let andrew = Person(given: "Andrew", family: "Hill", nickname: "")
+        let candace = Person(given: "Candace", family: "White", nickname: "")
+        let everyone = [william, andrew, candace]
+        #expect(names("I will get it right this time.", everyone).isEmpty)
+        #expect(names("Okay, I will write it up and say hello.", everyone).isEmpty)
+        #expect(names("Can you tell me what happened?", everyone).isEmpty)
+        #expect(names("Ask Will Wright, and say hello.", everyone) == ["William Wright"])
+    }
+
+    // Catches a transcript with no capitals losing a full name spelled exactly.
+    @Test func lowercaseFullNameSpelledExactlyMatches() {
+        #expect(names("send the notes to will turner", [will, jonathan]) == ["Will Turner"])
+    }
+
+    // Catches a last name matched far from the first name counting as a full
+    // name, which escapes the cap on people resting on a single name.
+    @Test func aLastNameFarFromTheFirstDoesntMakeAFullName() {
+        let wright = Person(given: "Jonathan", family: "Wright", nickname: "")
+        let lind = Person(given: "Jonathan", family: "Lind", nickname: "")
+        #expect(names("Then ask Jon about it, right?", [wright, lind, jonathan]) == ["Jonathan Grubb", "Jonathan Lind"])
+    }
+
     // Catches "Will you…" at the start of a sentence sending Will Turner.
     @Test func shortNameStartingASentenceDoesntMatch() {
         #expect(names("Will you send the notes? Sure.", [will]).isEmpty)

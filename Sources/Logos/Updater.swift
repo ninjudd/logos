@@ -193,8 +193,11 @@ enum Updater {
 
     // MARK: GitHub access
 
-    private static func request(_ path: String) -> URLRequest {
+    static func request(_ path: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/\(path)")!)
+        // GitHub lets clients keep an answer for 60 seconds, so without this a
+        // check just after a release would repeat the stale answer it got before.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 15
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("logos-cli", forHTTPHeaderField: "User-Agent")

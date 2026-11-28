@@ -80,4 +80,10 @@ import Testing
         #expect(result == .failed("GitHub is down"))
         #expect(!FileManager.default.fileExists(atPath: cache.path))
     }
+
+    // Catches a check just after a release reusing macOS's cached answer from
+    // before it, which GitHub allows for 60 seconds.
+    @Test func requestsSkipTheLocalCache() {
+        #expect(Updater.request("releases/latest").cachePolicy == .reloadIgnoringLocalCacheData)
+    }
 }

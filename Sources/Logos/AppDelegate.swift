@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var trustTimer: Timer?
     private var availableUpdate: String?
     private var updateTimer: Timer?
+    private var isCheckingForUpdates = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         quitOtherCopies()
@@ -60,10 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if ConfigStore.shared.current.useContacts { Task { await ContactsIndex.shared.enable() } }
         if let error = ConfigStore.shared.lastError { overlay.flash(error) }
 
-        checkForUpdate()
-        // The cache limits this to one request to GitHub a day.
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkForUpdate() }
+        checkAutomatically()
+        // The cache limits this to one request to GitHub a day. Each tick reads
+        // the setting, so turning it on or off applies within the hour.
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkAutomatically() }
         }
     }
 
@@ -82,12 +84,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Updates
 
-    private func checkForUpdate() {
+    /// Looks for a newer release when the checkForUpdates setting allows it, and
+    /// offers it in the menu without interrupting you.
+    private func checkAutomatically() {
+        let enabled = ConfigStore.shared.current.checkForUpdates
         Task { @MainActor in
-            guard let tag = await Updater.latestTagCached(),
-                  Updater.isNewer(tag, than: Updater.installedVersion) else { return }
+            guard let tag = await Updater.automaticCheck(enabled: enabled) else { return }
             availableUpdate = tag
         }
+    }
+
+    /// Check for Updates… in the menu. It asks GitHub now and always answers,
+    /// with an offer to install, the version you have, or the error.
+    @objc private func checkForUpdatesNow() {
+        guard !isCheckingForUpdates else { return }
+        isCheckingForUpdates = true
+        Task { @MainActor [weak self] in
+            let result = await Updater.check()
+            self?.report(result)
+            self?.isCheckingForUpdates = false
+        }
+    }
+
+    private func report(_ result: Updater.CheckResult) {
+        let alert = NSAlert()
+        switch result {
+        case .newer(let tag):
+            availableUpdate = tag
+            alert.messageText = "Logos \(tag) is available"
+            alert.informativeText = "You have Logos \(Updater.installedVersion). Installing builds the new version on this Mac, then restarts Logos."
+            alert.addButton(withTitle: "Install")
+            alert.addButton(withTitle: "Later")
+        case .upToDate(let latest):
+            availableUpdate = nil
+            alert.messageText = "Logos \(Updater.installedVersion) is the latest version"
+            alert.informativeText = "The newest release on GitHub is \(latest)."
+        case .failed(let message):
+            alert.alertStyle = .warning
+            alert.messageText = "Couldn't check for updates"
+            alert.informativeText = message
+        }
+        // Logos has no Dock icon, so the alert would open behind the app in front.
+        NSApp.activate()
+        if alert.runModal() == .alertFirstButtonReturn, case .newer = result { installUpdate() }
+    }
+
+    @objc private func toggleCheckForUpdates() {
+        let enabled = !ConfigStore.shared.current.checkForUpdates
+        do {
+            try ConfigFile.set(enabled, at: ["checkForUpdates"])
+        } catch {
+            overlay.flash(error.localizedDescription)
+            return
+        }
+        settings.refresh(\.checkForUpdates)
     }
 
     /// Runs the release's installer in the background. It builds the new version,
@@ -365,6 +415,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         copy.isEnabled = lastText != nil
         menu.addItem(copy)
         menu.addItem(.separator())
+        if isCheckingForUpdates {
+            menu.addItem(NSMenuItem(title: "Checking for Updates…", action: nil, keyEquivalent: ""))
+        } else {
+            menu.addItem(item("Check for Updates…", #selector(checkForUpdatesNow)))
+        }
+        let automatic = item("Check for Updates Automatically", #selector(toggleCheckForUpdates))
+        automatic.state = config.checkForUpdates ? .on : .off
+        menu.addItem(automatic)
         let login = item("Launch at Login", #selector(toggleLaunchAtLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)

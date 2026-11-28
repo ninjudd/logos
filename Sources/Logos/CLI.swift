@@ -111,7 +111,8 @@ enum CLI {
         if let error = ConfigStore.shared.lastError { fputs("warning: \(error)\n", stderr) }
         if !cleanup { config.cleanup.enabled = false }
         config.saveHistory = false
-        let newer = Task { await Updater.latestTagCached() }
+        let checks = config.checkForUpdates
+        let newer = Task { await Updater.automaticCheck(enabled: checks) }
 
         let start = Date()
         let status: Int32
@@ -137,7 +138,7 @@ enum CLI {
         return status
     }
 
-    /// Prints a warning when a newer release exists, giving the daily check two
+    /// Prints a warning when `check` found a newer release, giving it two
     /// seconds at most so it never holds up a command.
     private static func warnIfBehind(_ check: Task<String?, Never>) async {
         let timeout = Task {
@@ -145,7 +146,7 @@ enum CLI {
             check.cancel()
         }
         defer { timeout.cancel() }
-        guard let tag = await check.value, Updater.isNewer(tag, than: Updater.installedVersion) else { return }
+        guard let tag = await check.value else { return }
         fputs("warning: logos \(Updater.installedVersion) is behind the \(tag) release; run 'logos update'\n", stderr)
     }
 

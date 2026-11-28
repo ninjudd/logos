@@ -72,11 +72,13 @@ built="$src/build/Logos.app"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$built/Contents/Info.plist")"
 
 # Quit the installed app, and wait until it has exited so the new one can start.
+# -a includes this script's ancestors, which pgrep and pkill otherwise skip:
+# when the app updates itself from its menu, it is this script's parent.
 running="^$dest/Contents/MacOS/Logos$"
-if pgrep -f "$running" >/dev/null; then
-  pkill -f "$running" || true
+if pgrep -af "$running" >/dev/null; then
+  pkill -af "$running" || true
   for _ in $(seq 50); do
-    pgrep -f "$running" >/dev/null || break
+    pgrep -af "$running" >/dev/null || break
     sleep 0.1
   done
 fi

@@ -31,6 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var availableUpdate: String?
     private var updateTimer: Timer?
     private var isCheckingForUpdates = false
+    /// The release being installed, while its installer runs.
+    private var updating: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         quitOtherCopies()
@@ -59,6 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let transcription = ConfigStore.shared.current.transcription
         Task { await Transcriber.prepare(transcription) }
         if ConfigStore.shared.current.useContacts { Task { await ContactsIndex.shared.enable() } }
+        if let update = Updater.takePending() {
+            let message = Updater.launchMessage(after: update)
+            overlay.flash(message.text, seconds: 6, success: message.success)
+        }
+        // A broken config matters more than an update's news, so its message replaces it.
         if let error = ConfigStore.shared.lastError { overlay.flash(error) }
 
         checkAutomatically()
@@ -143,8 +150,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs the release's installer in the background. It builds the new version,
     /// replaces this app, and starts it, so this process ends when it succeeds.
     @objc private func installUpdate() {
-        guard let tag = availableUpdate else { return }
-        overlay.flash("Building Logos \(tag). It restarts when the build finishes.", seconds: 6, success: true)
+        guard let tag = availableUpdate, updating == nil else { return }
+        updating = tag
+        overlay.flash("Updating to Logos \(tag). The menu shows its progress, and Logos restarts when it's done.",
+                      seconds: 6, success: true)
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -154,14 +163,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let log = try FileHandle(forWritingTo: Paths.updateLog)
                 process.standardOutput = log
                 process.standardError = log
+                // A successful install quits this copy and starts the new one, so
+                // this runs only when the installer fails or this copy survived it.
                 process.terminationHandler = { [weak self] process in
-                    guard process.terminationStatus != 0 else { return }
-                    Task { @MainActor in self?.overlay.flash("Update failed. See \(Paths.updateLog.path)") }
+                    let status = process.terminationStatus
+                    Task { @MainActor in self?.updateEnded(tag: tag, status: status) }
                 }
+                Updater.recordPending(.init(from: Updater.installedVersion, to: tag))
                 try process.run()
             } catch {
-                overlay.flash("Update failed: \(error.localizedDescription)")
+                updateEnded(tag: tag, error: error.localizedDescription)
             }
+        }
+    }
+
+    private func updateEnded(tag: String, status: Int32 = 1, error: String? = nil) {
+        updating = nil
+        _ = Updater.takePending()
+        if let error {
+            overlay.flash("Update failed: \(error)")
+        } else if status != 0 {
+            overlay.flash("Update failed. See \(Paths.updateLog.path)")
+        } else {
+            overlay.flash("Logos \(tag) is installed, but this copy is still running. Quit Logos and open it again to finish.")
         }
     }
 
@@ -397,7 +421,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let config = ConfigStore.shared.current
         menu.addItem(NSMenuItem(title: "Logos \(Updater.installedVersion)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Hold \(config.hotkey) to dictate", action: nil, keyEquivalent: ""))
-        if let availableUpdate {
+        if let updating {
+            let log = (try? String(contentsOf: Paths.updateLog, encoding: .utf8)) ?? ""
+            menu.addItem(NSMenuItem(title: "Updating to \(updating): \(Updater.progress(log: log))…", action: nil, keyEquivalent: ""))
+        } else if let availableUpdate {
             menu.addItem(item("Update to \(availableUpdate)…", #selector(installUpdate)))
         }
         if let error = ConfigStore.shared.lastError {

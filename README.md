@@ -143,6 +143,8 @@ This builds and installs the newest release, then restarts the app. `logos updat
 
 To check from the app, choose **Check for Updates…** from the menu bar icon. Logos asks GitHub at once and answers in a dialog. It offers to install a newer release, says that your version is the latest, or shows why the check failed. **Install** does what `logos update` does.
 
+While an update installs, the menu shows **Updating to vX.Y.Z** and how far it has got, such as "building 59%". The build takes about a minute. Logos then restarts and says **Updated to Logos X.Y.Z**. If an update fails, Logos says so and points to `~/.config/logos/update.log`, which holds the installer's output.
+
 Logos also checks on its own, at launch and every hour, and asks GitHub at most once a day. When it finds a newer release, the menu shows **Update to vX.Y.Z…**, and `logos transcribe` warns that you're behind. To stop these checks, turn off **Check for Updates Automatically** in the menu, or **Check for updates automatically** in **Settings… → Config**. Both set `checkForUpdates` in `config.json`. Logos reads the setting at each hourly check, so the change needs no restart. **Check for Updates…** works either way.
 
 ## Troubleshooting

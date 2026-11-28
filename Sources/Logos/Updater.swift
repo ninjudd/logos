@@ -134,6 +134,55 @@ enum Updater {
         return tag
     }
 
+    // MARK: Install progress
+
+    /// How far an update has got, from the installer's log so far, such as
+    /// "building 59%".
+    static func progress(log: String) -> String {
+        var stage = "downloading"
+        for line in log.split(separator: "\n") {
+            if line.hasPrefix("Installed Logos") || line.hasPrefix("Built ") {
+                stage = "installing"
+            } else if line.hasPrefix("Building") || line.hasPrefix("[Planning") {
+                stage = "building"
+            } else if line.hasPrefix("["), let slash = line.firstIndex(of: "/"), let close = line.firstIndex(of: "]"),
+                      let done = Int(line[line.index(after: line.startIndex)..<slash].trimmingCharacters(in: .whitespaces)),
+                      let total = Int(line[line.index(after: slash)..<close].trimmingCharacters(in: .whitespaces)), total > 0 {
+                stage = "building \(min(99, done * 100 / total))%"
+            }
+        }
+        return stage
+    }
+
+    /// An update that has started, recorded so the version it starts can say
+    /// whether it took.
+    struct PendingUpdate: Codable, Equatable {
+        var from: String
+        var to: String
+    }
+
+    static var pendingFile: URL { cacheFile.deletingLastPathComponent().appending(path: "update.json") }
+
+    static func recordPending(_ update: PendingUpdate, at file: URL = pendingFile) {
+        guard let data = try? JSONEncoder().encode(update) else { return }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: file, options: .atomic)
+    }
+
+    /// The pending update, if any, removing its record so it's reported once.
+    static func takePending(at file: URL = pendingFile) -> PendingUpdate? {
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard let data = try? Data(contentsOf: file) else { return nil }
+        return try? JSONDecoder().decode(PendingUpdate.self, from: data)
+    }
+
+    /// What to tell you when Logos starts after an update, and whether it worked.
+    static func launchMessage(after update: PendingUpdate, installed: String = installedVersion) -> (text: String, success: Bool) {
+        let target = update.to.hasPrefix("v") ? String(update.to.dropFirst()) : update.to
+        if installed == target { return ("Updated to Logos \(installed)", true) }
+        return ("The update to Logos \(target) didn't finish, so this is still \(installed). See \(Paths.updateLog.path).", false)
+    }
+
     private static func save(_ check: Check, to cache: URL) {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

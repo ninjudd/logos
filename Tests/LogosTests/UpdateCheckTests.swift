@@ -80,4 +80,24 @@ import Testing
         #expect(result == .failed("GitHub is down"))
         #expect(!FileManager.default.fileExists(atPath: cache.path))
     }
+
+    // Catches a check just after a release repeating the answer an earlier check
+    // got, which GitHub's Cache-Control header lets the URL cache keep for 60
+    // seconds. A local server stands in for GitHub and names a newer release
+    // each time it's asked.
+    @Test func checkAsksGitHubAgainWithinAMinute() async throws {
+        let server = try LocalHTTPServer { request in
+            (["Cache-Control": "public, max-age=60, s-maxage=60"], #"{"tag_name": "v0.\#(request).0"}"#)
+        }
+        try await server.start()
+        defer { server.stop() }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = URLCache(memoryCapacity: 1 << 20, diskCapacity: 0)
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        #expect(try await Updater.latestTag(session: session, api: server.url) == "v0.1.0")
+        #expect(try await Updater.latestTag(session: session, api: server.url) == "v0.2.0")
+        #expect(server.requests == 2)
+    }
 }

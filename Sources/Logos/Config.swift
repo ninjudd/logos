@@ -219,7 +219,12 @@ extension Config {
 
 struct LogosError: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
+    /// The HTTP status of the API response that this error reports, if any.
+    var status: Int?
+    init(_ message: String, status: Int? = nil) {
+        self.message = message
+        self.status = status
+    }
     var errorDescription: String? { message }
 }
 
@@ -335,8 +340,15 @@ enum Vocabulary {
     }
 
     /// A transcription API's `prompt`: your own hint, then the words to listen for.
+    /// Whisper answers a recording with no words by continuing the prompt, so the
+    /// list ends with "Nothing. …" to give it something other than a word to
+    /// repeat. Groq's whisper-large-v3-turbo, given seven breaths and clicks,
+    /// answered "…" to each. Given forty voiced fillers such as "Oh.", it
+    /// answered with the list's last word once. A list ending with "…" alone got
+    /// the last word back 14 times, and one ending with a word got it for every
+    /// breath and click. Speech came back the same with each ending.
     static func transcriptionHint(_ prompt: String, words: [String]) -> String {
-        let vocabulary = words.isEmpty ? "" : "Vocabulary: \(words.joined(separator: ", "))."
+        let vocabulary = words.isEmpty ? "" : "Vocabulary: \(words.joined(separator: ", ")). Nothing. …"
         return [prompt, vocabulary].filter { !$0.isEmpty }.joined(separator: " ")
     }
 }

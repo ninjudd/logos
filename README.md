@@ -154,6 +154,7 @@ Logos also checks on its own, at launch and every hour, and asks GitHub at most 
 - **Another app opens when you double-tap Option**, such as the Claude desktop app's Quick Entry. That app is listening for the same key. Turn off or change its shortcut, or choose another Logos hotkey.
 - **"No speech detected" on every dictation.** Logos is recording from a device with no microphone attached. Choose **Built-in microphone (recommended)** from the **Microphone** menu in **Settings… → Config**.
 - **"No speech detected" when you spoke softly.** Your recording was quieter than `silenceThresholdDB`, so Logos didn't transcribe it. Each line of `history.jsonl` gives the dictation's `peakDB`, the level of its loudest 50 milliseconds. Speak closer to the microphone, or set `silenceThresholdDB` below the `peakDB` of your soft speech, such as `-55`.
+- **"No speech detected" when you said one word.** A server speech model gets a hint: your `transcription.prompt`, then your dictionary's words, then "Nothing. …". Given a breath, a click, a keypress, or a voiced "oh", a Whisper model tends to answer by continuing that hint, usually with "…", or with words from the hint, or with a stock phrase such as "Thank you." So Logos drops a server model's transcript in three cases. In the first, Whisper itself marks the transcript's segments as holding no speech. In the second, the transcript is punctuation alone. In the third, the transcript is only a run of the hint's words or a stock phrase, and the recording's `peakDB` is below `silenceThresholdDB` plus 15, which is -30 by default. A word you said softly can meet that third case. The line in `history.jsonl` then gives the transcript as `dropped`, and `droppedReason` says which case dropped it: `noSpeech` for the first, `echo` for the others. Say the word louder, or with the words around it. Logos checks only server models' transcripts, not those of Apple's on-device models.
 - **"The microphone didn't respond."** The audio system was busy, usually because a display or an audio interface was connecting. Dictate again.
 - **"Cleanup failed, pasted raw text."** The message names the cause, usually a missing or mistyped API key. Check the key under **API keys** in **Settings… → Config**.
 - **A card appears where you expected a paste.** Logos didn't recognize that app's text field. Add the app's bundle ID to `alwaysPasteApps` in `config.json`. `osascript -e 'id of app "Ghostty"'` prints an app's bundle ID.
@@ -166,7 +167,7 @@ Logos keeps its files in `~/.config/logos/` and rereads each one when it changes
 - **`config.json`** holds settings and API keys, readable only by you. The **Config** tab writes only the setting you change, so settings you add by hand are kept.
 - **`prompt.md`** is the cleanup prompt.
 - **`dictionary.txt`** is your dictionary.
-- **`history.jsonl`** logs each dictation's raw and cleaned text, models, timings, and loudness.
+- **`history.jsonl`** logs each dictation's raw and cleaned text, models, timings, and loudness, and any transcript that Logos dropped as no speech.
 - **`context.d/`** holds files other apps write to tell Logos what to listen for.
 
 Models are named `provider/model`, and each provider's key goes under `keys`. You can leave out any setting you don't change:
@@ -185,11 +186,11 @@ A key you leave empty falls back to the `<PROVIDER>_API_KEY` environment variabl
 | --- | --- | --- |
 | `hotkey` | `option` | The key to hold. A modifier alone, either side or one side (`option`, `rightOption`, `leftCommand`, `fn`), or any key with optional modifiers (`f13`, `ctrl+space`, `cmd+shift+d`). |
 | `minHoldSeconds` | `0.3` | The shortest hold that counts as a dictation. |
-| `silenceThresholdDB` | `-45` | The level below which a recording counts as silence, in decibels below the loudest sound a recording can hold (dBFS). Logos measures the recording's loudest 50 milliseconds. Below this level, the recording goes to no model and nothing is pasted. Speech usually measures between -30 and -10, and a quiet room between -60 and -50. `-100` sends every recording. |
+| `silenceThresholdDB` | `-45` | The level below which a recording counts as silence, in decibels below the loudest sound a recording can hold (dBFS). Logos measures the recording's loudest 50 milliseconds. Below this level, the recording goes to no model and nothing is pasted. Speech usually measures between -30 and -10, and a quiet room between -60 and -50. Logos also drops a server model's transcript that only repeats its hint when the recording is quieter than this level plus 15. `-100` sends every recording and turns that check off. |
 | `inputDevice` | `builtIn` | The microphone: `builtIn`, `system` for macOS's default input, or a device's UID from the **Microphone** menu. |
 | `transcription.model` | `apple` | The speech model. |
 | `transcription.locale` | `en-US` | The language you speak. |
-| `transcription.prompt` | empty | A hint for server speech models, sent before your dictionary's words. |
+| `transcription.prompt` | empty | A hint for server speech models, sent before your dictionary's words and "Nothing. …". |
 | `cleanup.enabled` | `true` | Clean up transcripts, or paste them raw. |
 | `cleanup.model` | `anthropic/claude-opus-5-5` | The cleanup model. |
 | `cleanup.effort` | `low` | Anthropic models' effort level. Empty uses the model's default. |

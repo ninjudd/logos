@@ -7,6 +7,8 @@ enum Pipeline {
         var text: String
         /// Set when cleanup was skipped or failed and the raw transcript is used instead.
         var warning: String?
+        /// What the speech model returned that NoSpeech kept out of `raw`.
+        var dropped: NoSpeech.Dropped?
     }
 
     static func run(audio: URL, config: Config, prompt: String, vocabulary: [Vocabulary.Entry], app: String,
@@ -15,19 +17,19 @@ enum Pipeline {
         let started = Date()
         // A file Logos can't measure goes to the speech model, which may read it.
         let level = try? Loudness.peakDB(of: audio)
-        let raw: String
-        if let level, Loudness.isSilent(level, threshold: config.silenceThresholdDB) {
-            raw = ""
-        } else {
+        let silent = level.map { Loudness.isSilent($0, threshold: config.silenceThresholdDB) } ?? false
+        var transcript = NoSpeech.Transcript(text: "")
+        if !silent {
             stage("Transcribing…")
-            raw = try await Transcriber.transcribe(audio, config: config, vocabulary: vocabulary)
+            transcript = try await Transcriber.transcribe(audio, config: config, vocabulary: vocabulary, peakDB: level)
         }
+        let raw = transcript.text
         let transcribed = Date()
         var context = context
         context.hints += People.hints(for: raw, config: config, people: ContactsIndex.shared.people,
                                       cardEmails: ContactsIndex.shared.ownEmails)
 
-        var outcome = Outcome(raw: raw, text: raw)
+        var outcome = Outcome(raw: raw, text: raw, dropped: transcript.dropped)
         if raw.isEmpty {
             outcome.warning = "No speech detected"
         } else if config.cleanup.enabled {
@@ -41,7 +43,7 @@ enum Pipeline {
         }
 
         if config.saveHistory {
-            History.append([
+            var entry: [String: Any] = [
                 "time": ISO8601DateFormatter().string(from: started),
                 "app": app,
                 "raw": raw,
@@ -52,7 +54,12 @@ enum Pipeline {
                 "cleanupSeconds": (Date().timeIntervalSince(transcribed) * 100).rounded() / 100,
                 "warning": outcome.warning ?? "",
                 "peakDB": level.map { ($0 * 10).rounded() / 10 as Any } ?? NSNull(),
-            ])
+            ]
+            if let dropped = outcome.dropped {
+                entry["dropped"] = dropped.text
+                entry["droppedReason"] = dropped.reason.rawValue
+            }
+            History.append(entry)
         }
         return outcome
     }

@@ -1,8 +1,8 @@
 import AVFoundation
 
 /// How loud a recording gets, so Logos can skip transcribing one with no speech
-/// in it. Whisper models given silence tend to answer with the end of their
-/// `prompt`, which ends with the dictionary, so a silent hold would paste a
+/// in it. Whisper models given silence tend to answer with words from their
+/// `prompt`, which lists the dictionary, so a silent hold could paste a
 /// dictionary word.
 enum Loudness {
     /// The length of each window that `peakDB(of:)` measures. Fifty milliseconds is

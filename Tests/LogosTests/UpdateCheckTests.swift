@@ -53,8 +53,9 @@ import Testing
         #expect(cached == "v0.3.0")
     }
 
-    // Catches LOGOS_OFFLINE no longer stopping the automatic check, which would
-    // ask GitHub and offer an update anyway.
+    // Catches latestTagCached dropping its offline guard and asking GitHub
+    // anyway. It passes offline itself, so it doesn't check that the default
+    // reads LOGOS_OFFLINE.
     @Test func cachedCheckAsksNothingWhenOffline() async {
         defer { removeCache() }
         var asked = false

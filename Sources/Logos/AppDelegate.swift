@@ -152,6 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func installUpdate() {
         guard let tag = availableUpdate, updating == nil else { return }
         updating = tag
+        // The menu reads its progress from this log, so a menu opened while
+        // install.sh downloads must not show the last update's final stage.
+        FileManager.default.createFile(atPath: Paths.updateLog.path, contents: nil)
         overlay.flash("Updating to Logos \(tag). The menu shows its progress, and Logos restarts when it's done.",
                       seconds: 6, success: true)
         Task { @MainActor [weak self] in
@@ -159,7 +162,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             do {
                 let installer = try await Updater.installer(tag: tag)
                 let process = Updater.installProcess(installer: installer, tag: tag)
-                FileManager.default.createFile(atPath: Paths.updateLog.path, contents: nil)
                 let log = try FileHandle(forWritingTo: Paths.updateLog)
                 process.standardOutput = log
                 process.standardError = log

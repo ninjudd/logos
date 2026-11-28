@@ -5,17 +5,23 @@ import Speech
 enum Transcriber {
     /// Transcribes `audio`, listening especially for the words in `vocabulary`.
     /// Transcription models get only the words; their notes are for cleanup.
-    static func transcribe(_ audio: URL, config: Config, vocabulary entries: [Vocabulary.Entry]) async throws -> String {
+    /// `peakDB` is the recording's loudest 50 ms, which NoSpeech uses to tell an
+    /// API model's echo of its `prompt` from a word you said.
+    static func transcribe(_ audio: URL, config: Config, vocabulary entries: [Vocabulary.Entry],
+                           peakDB: Double? = nil) async throws -> NoSpeech.Transcript {
         let vocabulary = entries.map(\.term)
         let settings = config.transcription
         if let apple = AppleModel(settings.model) {
-            return try await apple.transcribe(audio, localeID: settings.locale, vocabulary: vocabulary)
+            let text = try await apple.transcribe(audio, localeID: settings.locale, vocabulary: vocabulary)
+            return NoSpeech.Transcript(text: text)
         }
         let resolved = try config.resolve(settings.model)
         guard resolved.api == "openai" else {
             throw LogosError("Provider \"\(resolved.provider)\" has no transcription API. Use \"apple\" or an OpenAI-compatible provider.")
         }
-        return try await openAI(audio, model: resolved, settings: settings, vocabulary: vocabulary)
+        let hint = Vocabulary.transcriptionHint(settings.prompt, words: vocabulary)
+        let response = try await openAI(audio, model: resolved, settings: settings, hint: hint)
+        return NoSpeech.filter(response, hint: hint, peakDB: peakDB, silenceThresholdDB: config.silenceThresholdDB)
     }
 
     /// Downloads the on-device speech model ahead of the first dictation.
@@ -103,17 +109,37 @@ enum Transcriber {
 
     // MARK: OpenAI-compatible
 
+    /// Whether to ask `model` for `verbose_json`, whose segments carry Whisper's
+    /// no-speech probability. OpenAI's gpt-4o transcription models accept only
+    /// `json` and `text`, so only models named for Whisper are asked.
+    static func asksForSegments(_ model: String) -> Bool {
+        model.lowercased().contains("whisper")
+    }
+
     private static func openAI(_ audio: URL, model: ResolvedModel, settings: Config.Transcription,
-                               vocabulary: [String]) async throws -> String {
+                               hint: String) async throws -> NoSpeech.Response {
+        let data = try Data(contentsOf: audio)
+        if asksForSegments(model.model) {
+            do {
+                return try await openAI(data, model: model, settings: settings, hint: hint, format: "verbose_json")
+            } catch let error as LogosError where error.status == 400 || error.status == 422 {
+                // A server without verbose_json rejects the request. A transcript
+                // without segments is better than none, so ask again for json.
+            }
+        }
+        return try await openAI(data, model: model, settings: settings, hint: hint, format: "json")
+    }
+
+    private static func openAI(_ audio: Data, model: ResolvedModel, settings: Config.Transcription,
+                               hint: String, format: String) async throws -> NoSpeech.Response {
         var form = MultipartForm()
         form.add("model", model.model)
-        form.add("response_format", "json")
-        let hint = Vocabulary.transcriptionHint(settings.prompt, words: vocabulary)
+        form.add("response_format", format)
         if !hint.isEmpty { form.add("prompt", hint) }
         if let language = Locale(identifier: settings.locale).language.languageCode?.identifier {
             form.add("language", language)
         }
-        form.addFile("file", filename: "audio.wav", contentType: "audio/wav", data: try Data(contentsOf: audio))
+        form.addFile("file", filename: "audio.wav", contentType: "audio/wav", data: audio)
 
         var request = URLRequest(url: model.baseURL.appending(path: "audio/transcriptions"))
         request.httpMethod = "POST"
@@ -122,9 +148,10 @@ enum Transcriber {
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
         request.httpBody = form.finish()
 
-        let json = try await HTTP.json(request)
-        guard let text = json["text"] as? String else { throw LogosError("Transcription response had no text") }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let response = NoSpeech.Response(json: try await HTTP.json(request)) else {
+            throw LogosError("Transcription response had no text")
+        }
+        return response
     }
 }
 
@@ -163,7 +190,7 @@ enum HTTP {
                 ?? error as? String
                 ?? String(data: data.prefix(300), encoding: .utf8)
                 ?? ""
-            throw LogosError("HTTP \(status): \(message)")
+            throw LogosError("HTTP \(status): \(message)", status: status)
         }
         guard let json else { throw LogosError("Response wasn't a JSON object") }
         return json

@@ -127,6 +127,9 @@ enum CLI {
             }
             print("raw:   \(outcome.raw)")
             if config.cleanup.enabled { print("clean: \(outcome.text)") }
+            if let dropped = outcome.dropped {
+                fputs("dropped (\(dropped.reason.rawValue)): \(dropped.text)\n", stderr)
+            }
             if let warning = outcome.warning { fputs("warning: \(warning)\n", stderr) }
             fputs(String(format: "took %.2fs\n", Date().timeIntervalSince(start)), stderr)
             status = 0

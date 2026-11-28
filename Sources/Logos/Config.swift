@@ -219,7 +219,12 @@ extension Config {
 
 struct LogosError: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
+    /// The HTTP status of the API response that this error reports, if any.
+    var status: Int?
+    init(_ message: String, status: Int? = nil) {
+        self.message = message
+        self.status = status
+    }
     var errorDescription: String? { message }
 }
 

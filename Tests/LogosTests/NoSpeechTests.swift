@@ -5,12 +5,26 @@ import Testing
 /// Responses from Groq's /audio/transcriptions with `response_format=verbose_json`,
 /// for clips that `say` and a noise generator made. The noise clip is room noise,
 /// a breath-like swell, and a click, whose loudest 50 ms measures -37 dBFS.
-/// Groq's request IDs are left out.
+/// Groq's request IDs are left out. Most come from hints that end with a word,
+/// which a model echoes most readily. The backstop still has to catch an echo
+/// of a hint that ends with "…", since a model can repeat any run of it.
 enum GroqFixtures {
     /// The prompt for `turboNoiseLastWord`.
     static let fourWordHint = "Vocabulary: alpha, bravo, charlie, Zanzibar."
+    /// The prompt for the `ellipsis` fixtures, as `Vocabulary.transcriptionHint` writes it.
+    static let ellipsisHint = "Vocabulary: alpha, bravo, charlie, Zanzibar. …"
     /// The prompt for every other fixture.
     static let threeWordHint = "Vocabulary: alpha, bravo, Zanzibar."
+
+    /// whisper-large-v3-turbo, the noise clip, with `ellipsisHint`: the hint's "…".
+    static let turboNoiseEllipsis = #"""
+    {"task":"transcribe","language":"English","duration":1.5,"text":" …","segments":[{"id":0,"seek":0,"start":0,"end":1.5,"text":" …","tokens":[50365,5799,50440],"temperature":0,"avg_logprob":-0.43306875,"compression_ratio":0.33333334,"no_speech_prob":0}]}
+    """#
+
+    /// whisper-large-v3-turbo, `say` speaking the hint's last word, with `ellipsisHint`.
+    static let turboWordEllipsis = #"""
+    {"task":"transcribe","language":"English","duration":0.936500032,"text":" Zanzibar.","segments":[{"id":0,"seek":0,"start":0,"end":1,"text":" Zanzibar.","tokens":[50365,1176,3910,897,289,13,50415],"temperature":0,"avg_logprob":-0.3576032,"compression_ratio":0.5555556,"no_speech_prob":0}]}
+    """#
 
     /// whisper-large-v3-turbo, the noise clip: the hint's last word, and a
     /// no_speech_prob of 0.
@@ -138,6 +152,22 @@ enum GroqFixtures {
     // Catches a lone "." from noise being pasted.
     @Test func dropsPunctuationFromNoise() throws {
         #expect(try filter(GroqFixtures.largeHissPeriod, peakDB: -37.6).text == "")
+    }
+
+    // Catches the "…" that ends the hint being pasted, from a breath or from
+    // noise loud enough to pass for speech.
+    @Test func dropsTheHintsEllipsisAtAnyLevel() throws {
+        for peakDB in [breath, -15, nil] {
+            let transcript = try filter(GroqFixtures.turboNoiseEllipsis, hint: GroqFixtures.ellipsisHint, peakDB: peakDB)
+            #expect(transcript == NoSpeech.Transcript(text: "", dropped: NoSpeech.Dropped(text: "…", reason: .echo)))
+        }
+    }
+
+    // Catches the ellipsis ending keeping the hint's last word from being
+    // transcribed when it is said.
+    @Test func keepsASpokenWordAfterTheEllipsis() throws {
+        let transcript = try filter(GroqFixtures.turboWordEllipsis, hint: GroqFixtures.ellipsisHint, peakDB: -12.8)
+        #expect(transcript == NoSpeech.Transcript(text: "Zanzibar."))
     }
 
     // Catches a stock phrase that Whisper scored as borderline no speech being

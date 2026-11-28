@@ -340,8 +340,12 @@ enum Vocabulary {
     }
 
     /// A transcription API's `prompt`: your own hint, then the words to listen for.
+    /// The list ends with "…" because Whisper answers a recording with no words
+    /// by continuing the prompt. Given a breath or a click, Groq's
+    /// whisper-large-v3-turbo answered "…" every time, where a list that ends
+    /// with a word got that word back every time. Speech came back the same.
     static func transcriptionHint(_ prompt: String, words: [String]) -> String {
-        let vocabulary = words.isEmpty ? "" : "Vocabulary: \(words.joined(separator: ", "))."
+        let vocabulary = words.isEmpty ? "" : "Vocabulary: \(words.joined(separator: ", ")). …"
         return [prompt, vocabulary].filter { !$0.isEmpty }.joined(separator: " ")
     }
 }

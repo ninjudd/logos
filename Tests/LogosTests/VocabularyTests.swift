@@ -45,8 +45,14 @@ import Testing
     @Test func transcriptionHintKeepsYourPrompt() {
         #expect(Vocabulary.transcriptionHint("", words: []) == "")
         #expect(Vocabulary.transcriptionHint("A podcast.", words: []) == "A podcast.")
-        #expect(Vocabulary.transcriptionHint("", words: ["Logos", "Ghostty"]) == "Vocabulary: Logos, Ghostty.")
-        #expect(Vocabulary.transcriptionHint("A podcast.", words: ["Logos"]) == "A podcast. Vocabulary: Logos.")
+        #expect(Vocabulary.transcriptionHint("", words: ["Logos", "Ghostty"]) == "Vocabulary: Logos, Ghostty. …")
+        #expect(Vocabulary.transcriptionHint("A podcast.", words: ["Logos"]) == "A podcast. Vocabulary: Logos. …")
+    }
+
+    // Catches the hint ending with a dictionary word, which Whisper repeats
+    // when given a breath or a click.
+    @Test func transcriptionHintEndsWithAnEllipsis() {
+        #expect(Vocabulary.transcriptionHint("", words: ["alpha", "Zanzibar"]).hasSuffix("Zanzibar. …"))
     }
 
     @Test func promptGetsTheDictionary() {

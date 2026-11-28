@@ -2,8 +2,9 @@ import Foundation
 
 /// Spots a transcript of a recording that holds no words, such as a breath, a
 /// click, or a keypress. Whisper models given such a recording tend to answer
-/// with words from their `prompt`, which ends with the dictionary, or with a
-/// stock phrase such as "Thank you." These checks run on the transcripts of
+/// by continuing their `prompt`, which lists the dictionary and ends with "…":
+/// with the "…", with words from the list, or with a stock phrase such as
+/// "Thank you." These checks run on the transcripts of
 /// OpenAI-compatible APIs. Apple's on-device models take the dictionary as a
 /// list of words, not as a `prompt`, so the checks leave them alone.
 enum NoSpeech {
@@ -116,8 +117,11 @@ enum NoSpeech {
         if speech.isEmpty {
             return Transcript(text: "", dropped: original.isEmpty ? nil : Dropped(text: original, reason: .noSpeech))
         }
-        if isEcho(speech, hint: hint),
-           isQuiet(peakDB, silenceThresholdDB: silenceThresholdDB) || isBorderline(response.noSpeechProb) {
+        // Punctuation alone, such as the "…" that ends the hint, holds nothing
+        // you said at any level, so it needs no level check.
+        if words(speech).isEmpty
+            || isEcho(speech, hint: hint)
+            && (isQuiet(peakDB, silenceThresholdDB: silenceThresholdDB) || isBorderline(response.noSpeechProb)) {
             return Transcript(text: "", dropped: Dropped(text: original, reason: .echo))
         }
         return Transcript(text: speech, dropped: speech == original ? nil : Dropped(text: original, reason: .noSpeech))

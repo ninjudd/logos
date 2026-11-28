@@ -7,7 +7,7 @@ import Testing
 /// a breath-like swell, and a click, whose loudest 50 ms measures -37 dBFS.
 /// Groq's request IDs are left out. Most come from hints that end with a word,
 /// which a model echoes most readily. The backstop still has to catch an echo
-/// of a hint that ends with "…", since a model can repeat any run of it.
+/// of a hint that ends with a placeholder, since a model can repeat any run of it.
 enum GroqFixtures {
     /// The prompt for `turboNoiseLastWord`.
     static let fourWordHint = "Vocabulary: alpha, bravo, charlie, Zanzibar."
@@ -19,6 +19,21 @@ enum GroqFixtures {
     /// whisper-large-v3-turbo, the noise clip, with `ellipsisHint`: the hint's "…".
     static let turboNoiseEllipsis = #"""
     {"task":"transcribe","language":"English","duration":1.5,"text":" …","segments":[{"id":0,"seek":0,"start":0,"end":1.5,"text":" …","tokens":[50365,5799,50440],"temperature":0,"avg_logprob":-0.43306875,"compression_ratio":0.33333334,"no_speech_prob":0}]}
+    """#
+
+    /// The prompt for the `placeholder` fixtures, as `Vocabulary.transcriptionHint` writes it.
+    static let placeholderHint = "Vocabulary: alpha, bravo, charlie, Zanzibar. Nothing. …"
+
+    /// whisper-large-v3-turbo, `say` speaking "Oh." at a -22 dBFS peak, with
+    /// `placeholderHint`: the placeholder, typed as three periods.
+    static let turboOhPlaceholder = #"""
+    {"task":"transcribe","language":"English","duration":1.576500096,"text":" ...","segments":[{"id":0,"seek":0,"start":0,"end":1.5799999,"text":" ...","tokens":[50365,1097,50444],"temperature":0,"avg_logprob":-1.1211218,"compression_ratio":0.33333334,"no_speech_prob":0}]}
+    """#
+
+    /// whisper-large-v3-turbo, `say` speaking "Hmm." at a -22 dBFS peak, with
+    /// `placeholderHint`: the placeholder.
+    static let turboHmmPlaceholder = #"""
+    {"task":"transcribe","language":"English","duration":1.668875008,"text":" …","segments":[{"id":0,"seek":0,"start":0,"end":1.68,"text":" …","tokens":[50365,5799,50449],"temperature":0,"avg_logprob":-0.6926138,"compression_ratio":0.33333334,"no_speech_prob":0}]}
     """#
 
     /// whisper-large-v3-turbo, `say` speaking the hint's last word, with `ellipsisHint`.
@@ -161,6 +176,26 @@ enum GroqFixtures {
             let transcript = try filter(GroqFixtures.turboNoiseEllipsis, hint: GroqFixtures.ellipsisHint, peakDB: peakDB)
             #expect(transcript == NoSpeech.Transcript(text: "", dropped: NoSpeech.Dropped(text: "…", reason: .echo)))
         }
+    }
+
+    // Catches the placeholder being pasted when a voiced "oh" or "hmm" is loud
+    // enough to pass for a word, which the level check alone lets through.
+    @Test func dropsAVoicedFillersPlaceholder() throws {
+        for json in [GroqFixtures.turboOhPlaceholder, GroqFixtures.turboHmmPlaceholder] {
+            let transcript = try filter(json, hint: GroqFixtures.placeholderHint, peakDB: -22)
+            #expect(transcript.text == "")
+            #expect(transcript.dropped?.reason == .echo)
+        }
+    }
+
+    // Catches the hint's "Nothing." being dropped when you said it, or pasted
+    // from a breath. The responses are made up: with this hint, no test clip
+    // got "Nothing." back.
+    @Test func treatsTheWordNothingAsAHintWord() {
+        let response = NoSpeech.Response(text: " Nothing.")
+        let hint = GroqFixtures.placeholderHint
+        #expect(NoSpeech.filter(response, hint: hint, peakDB: -37, silenceThresholdDB: threshold).text == "")
+        #expect(NoSpeech.filter(response, hint: hint, peakDB: -15, silenceThresholdDB: threshold).text == "Nothing.")
     }
 
     // Catches the ellipsis ending keeping the hint's last word from being

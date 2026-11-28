@@ -1,12 +1,12 @@
 import Foundation
 
 /// Spots a transcript of a recording that holds no words, such as a breath, a
-/// click, or a keypress. Whisper models given such a recording tend to answer
-/// by continuing their `prompt`, which lists the dictionary and ends with "…":
-/// with the "…", with words from the list, or with a stock phrase such as
-/// "Thank you." These checks run on the transcripts of
-/// OpenAI-compatible APIs. Apple's on-device models take the dictionary as a
-/// list of words, not as a `prompt`, so the checks leave them alone.
+/// click, a keypress, or a voiced "oh". Whisper models given such a recording
+/// tend to answer by continuing their `prompt`, which lists the dictionary and
+/// ends with "Nothing. …". They answer with the "…", with words from the
+/// prompt, or with a stock phrase such as "Thank you." These checks run on the
+/// transcripts of OpenAI-compatible APIs. Apple's on-device models take the
+/// dictionary as a list of words, not as a `prompt`, so the checks leave them alone.
 enum NoSpeech {
     /// A transcript, and the text Logos dropped from it as no speech.
     struct Transcript: Equatable {

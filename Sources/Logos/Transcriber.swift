@@ -153,8 +153,8 @@ struct MultipartForm {
 enum HTTP {
     /// Sends the request and returns the JSON object body, throwing the API's own
     /// error message on a non-2xx status.
-    static func json(_ request: URLRequest) async throws -> [String: Any] {
-        let (data, response) = try await URLSession.shared.data(for: request)
+    static func json(_ request: URLRequest, session: URLSession = .shared) async throws -> [String: Any] {
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         guard (200..<300).contains(status) else {

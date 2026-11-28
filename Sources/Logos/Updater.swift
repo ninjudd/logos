@@ -32,11 +32,11 @@ enum Updater {
         return trimmed.split(separator: ".").map { Int($0) ?? 0 }
     }
 
-    /// The newest release's tag, such as "v0.2.0".
-    static func latestTag() async throws -> String {
+    /// The newest release's tag, such as "v0.2.0", from the GitHub API at `api`.
+    static func latestTag(session: URLSession = .shared, api: URL = githubAPI) async throws -> String {
         let json: [String: Any]
         do {
-            json = try await HTTP.json(request("releases/latest"))
+            json = try await HTTP.json(request("releases/latest", api: api), session: session)
         } catch let error as LogosError where error.message.hasPrefix("HTTP 404") {
             throw LogosError("\(repo) has no release yet, or you can't read it. A private repository needs `gh auth login` or GH_TOKEN.")
         }
@@ -85,7 +85,7 @@ enum Updater {
     /// automatic check starts from it. Runs even when LOGOS_OFFLINE is set,
     /// because you asked for it.
     static func check(installed: String = installedVersion, cache: URL = cacheFile,
-                      fetch: () async throws -> String = latestTag) async -> CheckResult {
+                      fetch: () async throws -> String = { try await latestTag() }) async -> CheckResult {
         do {
             let tag = try await fetch()
             save(Check(tag: tag, checked: Date()), to: cache)
@@ -120,7 +120,7 @@ enum Updater {
     /// reached.
     static func latestTagCached(maxAge: TimeInterval = 86_400, cache: URL = cacheFile,
                                 offline: Bool = ProcessInfo.processInfo.environment["LOGOS_OFFLINE"] != nil,
-                                fetch: () async throws -> String = latestTag) async -> String? {
+                                fetch: () async throws -> String = { try await latestTag() }) async -> String? {
         guard !offline else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -193,15 +193,18 @@ enum Updater {
 
     // MARK: GitHub access
 
-    static func request(_ path: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/\(path)")!)
+    static let githubAPI = URL(string: "https://api.github.com")!
+
+    private static func request(_ path: String, api: URL = githubAPI) -> URLRequest {
+        var request = URLRequest(url: URL(string: "\(api.absoluteString)/repos/\(repo)/\(path)")!)
         // GitHub lets clients keep an answer for 60 seconds, so without this a
         // check just after a release would repeat the stale answer it got before.
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 15
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("logos-cli", forHTTPHeaderField: "User-Agent")
-        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        // The token is for GitHub alone, never for a server that stands in for it.
+        if api == githubAPI, let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         return request
     }
 
